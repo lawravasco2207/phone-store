@@ -26,7 +26,7 @@ function RootLayout() {
     }
   }, [showMockDataNotice])
 
-  // Allow closing modal with Escape key
+  // Allow closing modal with the Escape key
   useEffect(() => {
     if (!showMockDataNotice) return
     const handler = (e: KeyboardEvent) => {
