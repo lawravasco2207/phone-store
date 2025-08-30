@@ -1,3 +1,29 @@
+# Build and Dependencies
+node_modules/
+dist/
+build/
+*.local
+
+# Package files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+npm-shrinkwrap.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Testing
+/coverage
+.nyc_output
+test-results/
+/test-reports/
+junit.xml
+.jestcache/
+
 # Logs
 logs
 *.log
@@ -7,15 +33,41 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+# Environment variables
+.env
+.env.development
+.env.test
+.env.production
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+.env.example
+
+# Uploads and user-generated content
+/uploads/*
+!/uploads/.gitkeep
+/public/uploads/*
+!/public/uploads/.gitkeep
+/tmp/
+/temp/
+
+# Database
+*.sqlite
+*.sqlite3
+*.db
+*.sql
+!/migrations/*.sql
+!/seeders/*.sql
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -23,8 +75,25 @@ dist-ssr
 *.sln
 *.sw?
 
-.env
-.env.test
-.env.production
-.env.local
-.env.*.local
+# Debug
+.chrome
+.node-debug
+debug.log
+
+# Serverless
+.serverless/
+.webpack/
+.netlify/
+.vercel/
+
+# Documentation 
+/docs
+/doc
+/documentation
+jsdoc/
+
+# Cache
+.eslintcache
+.npm
+.cache/
+.jest-cache/

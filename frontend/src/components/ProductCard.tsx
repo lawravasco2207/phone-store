@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import type { Product } from '../utils/mockData'
+import type { Product } from '../utils/api'
 import { useFavorites } from './FavoritesContext'
 import { useCart } from './CartContext'
 import { useToast } from './AlertToast'
@@ -10,12 +10,11 @@ import { useToast } from './AlertToast'
   
   Features:
   - Displays product image with hover effects and loading states
-  - Shows rating, price, and key product info
+  - Shows price and key product info
   - Heart icon for favorites (toggleable)
   - Add to cart functionality with toast notifications
   - Responsive design (mobile-first)
   - Smooth transitions and hover states
-  - Badge system for product tags
   - Image error handling
   - Accessibility features (ARIA labels, keyboard navigation)
   
@@ -44,57 +43,19 @@ export default function ProductCard({
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
   
-  const isFavorited = has(product.id)
-  
-  // Display primary tag (first one)
-  const primaryTag = product.tags[0]
+  const isFavorited = has(product.id.toString())
   
   // Format price with proper currency formatting
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: product.currency || 'USD',
+      currency: 'USD',
     }).format(price)
   }
   
-  // Generate star rating display with half-star support
-  const renderStars = (rating: number) => {
-    const stars = []
-    const fullStars = Math.floor(rating)
-    const hasHalfStar = rating % 1 >= 0.5
-    
-    for (let i = 0; i < 5; i++) {
-      if (i < fullStars) {
-        // Full star
-        stars.push(
-          <svg key={i} className="h-4 w-4 fill-amber-400 text-amber-400" viewBox="0 0 20 20">
-            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-          </svg>
-        )
-      } else if (i === fullStars && hasHalfStar) {
-        // Half star
-        stars.push(
-          <div key={i} className="relative h-4 w-4">
-            <svg className="absolute h-4 w-4 fill-gray-200 text-gray-200" viewBox="0 0 20 20">
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-            <svg className="absolute h-4 w-4 fill-amber-400 text-amber-400" viewBox="0 0 20 20" style={{ clipPath: 'inset(0 50% 0 0)' }}>
-              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-            </svg>
-          </div>
-        )
-      } else {
-        // Empty star
-        stars.push(
-          <svg key={i} className="h-4 w-4 fill-gray-200 text-gray-200" viewBox="0 0 20 20">
-            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-          </svg>
-        )
-      }
-    }
-    return stars
-  }
-
+  // Get primary image
+  const primaryImage = product.images?.[0] || '/placeholder-product.jpg'
+  
   // Handle adding product to cart with user feedback
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -114,7 +75,7 @@ export default function ProductCard({
     e.preventDefault()
     e.stopPropagation()
     
-    toggle(product.id)
+    toggle(product.id.toString())
     
     show({
       variant: 'info',
@@ -157,7 +118,7 @@ export default function ProductCard({
             </div>
           ) : (
             <img
-              src={product.thumbnail}
+              src={primaryImage}
               alt={product.name}
               className={`h-full w-full object-cover transition-all duration-500 group-hover:scale-105 ${
                 imageLoaded ? 'opacity-100' : 'opacity-0'
@@ -185,36 +146,19 @@ export default function ProductCard({
           </svg>
         </button>
         
-        {/* Product Badge - shows primary tag with semantic color coding */}
-        {primaryTag && (
+        {/* Stock Status Badge */}
+        {product.Inventory && product.Inventory.stock_quantity <= 5 && product.Inventory.stock_quantity > 0 && (
           <div className="absolute left-3 top-3">
-            <span className={`rounded-full px-2 py-1 text-xs font-medium shadow-sm ${
-              primaryTag === 'New Arrival' 
-                ? 'bg-green-100 text-green-800'
-                : primaryTag === 'Trending'
-                ? 'bg-blue-100 text-blue-800'
-                : primaryTag === 'Best Sellers'
-                ? 'bg-purple-100 text-purple-800'
-                : primaryTag === 'Budget-Friendly'
-                ? 'bg-orange-100 text-orange-800'
-                : primaryTag === 'Best for Gaming'
-                ? 'bg-red-100 text-red-800'
-                : primaryTag === 'Long Battery'
-                ? 'bg-teal-100 text-teal-800'
-                : primaryTag === 'Best Camera'
-                ? 'bg-indigo-100 text-indigo-800'
-                : 'bg-gray-100 text-gray-800'
-            }`}>
-              {primaryTag}
+            <span className="rounded-full bg-orange-100 text-orange-800 px-2 py-1 text-xs font-medium shadow-sm">
+              Only {product.Inventory.stock_quantity} left
             </span>
           </div>
         )}
         
-        {/* Premium Badge - highlights premium products */}
-        {product.premium && (
-          <div className="absolute right-3 bottom-3">
-            <span className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-2 py-1 text-xs font-medium text-white shadow-sm">
-              ✨ Premium
+        {product.Inventory && product.Inventory.stock_quantity === 0 && (
+          <div className="absolute left-3 top-3">
+            <span className="rounded-full bg-red-100 text-red-800 px-2 py-1 text-xs font-medium shadow-sm">
+              Out of Stock
             </span>
           </div>
         )}
@@ -222,8 +166,8 @@ export default function ProductCard({
 
       {/* Product Information Section */}
       <div className="p-4">
-        {/* Brand Name */}
-        <p className="text-sm font-medium text-[var(--muted)] mb-1">{product.brand}</p>
+        {/* Category */}
+        <p className="text-sm font-medium text-[var(--muted)] mb-1">{product.category}</p>
         
         {/* Product Name with proper heading hierarchy */}
         <Link to={`/products/${product.id}`} className="block">
@@ -235,23 +179,19 @@ export default function ProductCard({
           </h3>
         </Link>
         
-        {/* Rating Display with accessible labeling */}
-        <div className="flex items-center gap-2 mt-2 mb-3">
-          <div className="flex items-center gap-1" role="img" aria-label={`Rated ${product.rating.average} out of 5 stars`}>
-            {renderStars(product.rating.average)}
-          </div>
-          <span className="text-sm text-[var(--muted)]">
-            {product.rating.average.toFixed(1)} ({product.rating.count.toLocaleString()})
-          </span>
-        </div>
+        {/* Description */}
+        {product.description && (
+          <p className="text-sm text-[var(--muted)] mt-2 mb-3 line-clamp-2">
+            {product.description}
+          </p>
+        )}
         
         {/* Price and Actions Row */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mt-4">
           <div className="flex items-baseline gap-2">
             <span className="text-xl font-bold text-[var(--text)]">
               {formatPrice(product.price)}
             </span>
-            {/* Future: Show original price for discounted items */}
           </div>
           
           {/* Quick Actions - hidden by default, shown on hover for desktop */}
@@ -271,7 +211,8 @@ export default function ProductCard({
               
               <button 
                 onClick={handleAddToCart}
-                className="rounded-lg bg-[var(--brand-primary)] p-2 text-white hover:bg-[var(--brand-primary-700)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:ring-offset-2 transition-colors"
+                disabled={product.Inventory?.stock_quantity === 0}
+                className="rounded-lg bg-[var(--brand-primary)] p-2 text-white hover:bg-[var(--brand-primary-700)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label={`Add ${product.name} to cart`}
                 title="Add to cart"
               >

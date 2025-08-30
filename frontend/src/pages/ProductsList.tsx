@@ -2,18 +2,19 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ProductCard from '../components/ProductCard'
 import { useToast } from '../components/AlertToast'
-import { Catalog, type Tag, type CategoryName, type SortKey } from '../utils/mockData'
+import { api, type Product } from '../utils/api'
 
 /**
- * Enhanced ProductsListPage
+ * Enhanced ProductsListPage - Now integrated with backend API
  * 
  * Features:
+ * - Backend API integration for products
  * - Advanced filtering and sorting capabilities
  * - URL-based filter persistence (query parameters)
  * - Responsive layout with collapsible sidebar
  * - Search functionality with debouncing
  * - Category quick filters
- * - Results count and pagination-ready structure
+ * - Results count and pagination support
  * - Loading states and empty states
  * - Mobile-optimized filter interface
  * 
@@ -29,27 +30,27 @@ export default function ProductsListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { show } = useToast()
   
+  // State for backend data
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+  const [totalProducts, setTotalProducts] = useState(0)
+  const [categories, setCategories] = useState<string[]>([])
+  
   // Filter states - initialize from URL params
-  const [brand, setBrand] = useState<string>(searchParams.get('brand') || '')
-  const [min, setMin] = useState<string>(searchParams.get('min') || '')
-  const [max, setMax] = useState<string>(searchParams.get('max') || '')
-  const [tag, setTag] = useState<Tag | ''>(searchParams.get('tag') as Tag || '')
-  const [category, setCategory] = useState<CategoryName | ''>(searchParams.get('category') as CategoryName || '')
-  const [minRating, setMinRating] = useState<string>(searchParams.get('minRating') || '')
-  const [sort, setSort] = useState<SortKey>(searchParams.get('sort') as SortKey || 'popularity')
+  const [category, setCategory] = useState<string>(searchParams.get('category') || '')
+  const [sortBy, setSortBy] = useState<string>(searchParams.get('sortBy') || 'name')
+  const [sortDir, setSortDir] = useState<'ASC' | 'DESC'>(searchParams.get('sortDir') as 'ASC' | 'DESC' || 'ASC')
+  const [page, setPage] = useState<number>(Number(searchParams.get('page')) || 1)
   const [query, setQuery] = useState(searchParams.get('q') || '')
   const [debouncedQuery, setDebouncedQuery] = useState(query)
   
   // UI state
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
 
   // Debounce search query for performance
   useEffect(() => {
-    setIsLoading(true)
     const timer = setTimeout(() => {
       setDebouncedQuery(query.trim().toLowerCase())
-      setIsLoading(false)
     }, 300)
     return () => clearTimeout(timer)
   }, [query])
@@ -57,60 +58,72 @@ export default function ProductsListPage() {
   // Update URL params when filters change
   useEffect(() => {
     const params = new URLSearchParams()
-    if (brand) params.set('brand', brand)
-    if (min) params.set('min', min)
-    if (max) params.set('max', max)
-    if (tag) params.set('tag', tag)
     if (category) params.set('category', category)
-    if (minRating) params.set('minRating', minRating)
-    if (sort !== 'popularity') params.set('sort', sort)
+    if (sortBy !== 'name') params.set('sortBy', sortBy)
+    if (sortDir !== 'ASC') params.set('sortDir', sortDir)
+    if (page !== 1) params.set('page', page.toString())
     if (query) params.set('q', query)
     
     setSearchParams(params, { replace: true })
-  }, [brand, min, max, tag, category, minRating, sort, query, setSearchParams])
+  }, [category, sortBy, sortDir, page, query, setSearchParams])
 
-  // Get unique brands and categories for filter options
-  const availableBrands = useMemo(() => {
-    return Array.from(new Set(Catalog.PRODUCTS.map(p => p.brand))).sort()
-  }, [])
+  // Fetch products from backend
+  const fetchProducts = async () => {
+    setLoading(true)
+    try {
+      const response = await api.getProducts({
+        page,
+        limit: 12,
+        sortBy,
+        sortDir,
+        category: category || undefined,
+      })
+      
+      if (response.success && response.data) {
+        setProducts(response.data.products || [])
+        setTotalProducts(response.data.pagination?.total || 0)
+        
+        // Extract unique categories from products
+        const uniqueCategories = Array.from(new Set(
+          (response.data.products || []).flatMap(p => 
+            p.Categories?.map(c => c.name) || [p.category]
+          ).filter(Boolean)
+        )).sort()
+        setCategories(uniqueCategories)
+      } else {
+        show({ variant: 'error', message: response.error || 'Failed to load products' })
+      }
+    } catch (error) {
+      console.error('Failed to fetch products:', error)
+      show({ variant: 'error', message: 'Failed to load products' })
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const allTags: Tag[] = ['Best for Gaming', 'Trending', 'Budget-Friendly', 'New Arrival', 'Best Sellers', 'Long Battery', 'Best Camera']
+  // Fetch products when filters change
+  useEffect(() => {
+    fetchProducts()
+  }, [page, sortBy, sortDir, category])
 
-  // Filter and sort products
+  // Filter products locally by search query (since backend doesn't have search yet)
   const filteredProducts = useMemo(() => {
-    const filtered = Catalog.filterProducts(Catalog.PRODUCTS, {
-      brands: brand ? [brand] : undefined,
-      categories: category ? [category] : undefined,
-      price: { 
-        min: min ? Number(min) : undefined, 
-        max: max ? Number(max) : undefined 
-      },
-      tags: tag ? [tag] : undefined,
-      minRating: minRating ? Number(minRating) : undefined,
-    })
+    if (!debouncedQuery) return products
     
-    // Apply search query
-    const searched = debouncedQuery
-      ? filtered.filter(p => 
-          `${p.name} ${p.brand} ${p.description} ${p.tags.join(' ')}`
-            .toLowerCase()
-            .includes(debouncedQuery)
-        )
-      : filtered
-    
-    return Catalog.sortProducts(searched, sort)
-  }, [brand, min, max, tag, category, minRating, sort, debouncedQuery])
+    return products.filter(p => 
+      `${p.name} ${p.category} ${p.description || ''}`
+        .toLowerCase()
+        .includes(debouncedQuery)
+    )
+  }, [products, debouncedQuery])
 
   // Clear all filters
   const clearAllFilters = () => {
-    setBrand('')
-    setMin('')
-    setMax('')
-    setTag('')
     setCategory('')
-    setMinRating('')
+    setSortBy('name')
+    setSortDir('ASC')
+    setPage(1)
     setQuery('')
-    setSort('popularity')
     
     show({
       variant: 'info',
@@ -120,7 +133,8 @@ export default function ProductsListPage() {
   }
 
   // Count active filters
-  const activeFiltersCount = [brand, min, max, tag, category, minRating, query].filter(Boolean).length
+  const activeFiltersCount = [category, query].filter(Boolean).length + 
+    (sortBy !== 'name' || sortDir !== 'ASC' ? 1 : 0)
 
   return (
     <div className="space-y-6">
@@ -129,7 +143,7 @@ export default function ProductsListPage() {
         <div>
           <h1 className="text-2xl font-bold text-[var(--text)]">Products</h1>
           <p className="text-[var(--muted)] mt-1">
-            {isLoading ? 'Searching...' : `${filteredProducts.length} products found`}
+            {loading ? 'Loading...' : `${filteredProducts?.length || 0} products found`}
             {activeFiltersCount > 0 && ` with ${activeFiltersCount} filter${activeFiltersCount > 1 ? 's' : ''} applied`}
           </p>
         </div>
@@ -160,7 +174,7 @@ export default function ProductsListPage() {
         </div>
         <input
           type="text"
-          placeholder="Search products, brands, descriptions..."
+          placeholder="Search products by name, category, description..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="input w-full pl-10 pr-4 py-3"
@@ -177,22 +191,34 @@ export default function ProductsListPage() {
         )}
       </div>
 
-      {/* Quick Filter Tags - Desktop Only */}
-      <div className="hidden sm:flex flex-wrap gap-2">
-        {allTags.slice(0, 6).map(tagOption => (
+      {/* Quick Filter Categories */}
+      {categories.length > 0 && (
+        <div className="hidden sm:flex flex-wrap gap-2">
           <button
-            key={tagOption}
-            onClick={() => setTag(tag === tagOption ? '' : tagOption)}
+            onClick={() => setCategory('')}
             className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-              tag === tagOption
+              !category
                 ? 'bg-[var(--brand-primary)] text-white'
                 : 'bg-gray-100 text-[var(--text)] hover:bg-gray-200'
             }`}
           >
-            {tagOption}
+            All Categories
           </button>
-        ))}
-      </div>
+          {categories.slice(0, 5).map(cat => (
+            <button
+              key={cat}
+              onClick={() => setCategory(category === cat ? '' : cat)}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                category === cat
+                  ? 'bg-[var(--brand-primary)] text-white'
+                  : 'bg-gray-100 text-[var(--text)] hover:bg-gray-200'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Filters Sidebar */}
@@ -218,90 +244,13 @@ export default function ProductsListPage() {
                 </label>
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value as CategoryName | '')}
+                  onChange={(e) => setCategory(e.target.value)}
                   className="select w-full"
                 >
                   <option value="">All categories</option>
-                  {Catalog.CATEGORIES.map(cat => (
-                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
                   ))}
-                </select>
-              </div>
-
-              {/* Brand Filter */}
-              <div>
-                <label className="block text-sm font-medium text-[var(--text)] mb-2">
-                  Brand
-                </label>
-                <select
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  className="select w-full"
-                >
-                  <option value="">All brands</option>
-                  {availableBrands.map(brandOption => (
-                    <option key={brandOption} value={brandOption}>{brandOption}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Tag Filter */}
-              <div>
-                <label className="block text-sm font-medium text-[var(--text)] mb-2">
-                  Product Tags
-                </label>
-                <select
-                  value={tag}
-                  onChange={(e) => setTag(e.target.value as Tag | '')}
-                  className="select w-full"
-                >
-                  <option value="">All tags</option>
-                  {allTags.map(tagOption => (
-                    <option key={tagOption} value={tagOption}>{tagOption}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Price Range */}
-              <div>
-                <label className="block text-sm font-medium text-[var(--text)] mb-2">
-                  Price Range
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="number"
-                    placeholder="Min"
-                    value={min}
-                    onChange={(e) => setMin(e.target.value)}
-                    className="input"
-                    min="0"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Max"
-                    value={max}
-                    onChange={(e) => setMax(e.target.value)}
-                    className="input"
-                    min="0"
-                  />
-                </div>
-              </div>
-
-              {/* Rating Filter */}
-              <div>
-                <label className="block text-sm font-medium text-[var(--text)] mb-2">
-                  Minimum Rating
-                </label>
-                <select
-                  value={minRating}
-                  onChange={(e) => setMinRating(e.target.value)}
-                  className="select w-full"
-                >
-                  <option value="">Any rating</option>
-                  <option value="4.5">4.5+ stars</option>
-                  <option value="4">4+ stars</option>
-                  <option value="3.5">3.5+ stars</option>
-                  <option value="3">3+ stars</option>
                 </select>
               </div>
 
@@ -311,16 +260,20 @@ export default function ProductsListPage() {
                   Sort By
                 </label>
                 <select
-                  value={sort}
-                  onChange={(e) => setSort(e.target.value as SortKey)}
+                  value={`${sortBy}-${sortDir}`}
+                  onChange={(e) => {
+                    const [newSortBy, newSortDir] = e.target.value.split('-')
+                    setSortBy(newSortBy)
+                    setSortDir(newSortDir as 'ASC' | 'DESC')
+                  }}
                   className="select w-full"
                 >
-                  <option value="popularity">Most Popular</option>
-                  <option value="newest">Newest First</option>
-                  <option value="best-sellers">Best Sellers</option>
-                  <option value="price-asc">Price: Low to High</option>
-                  <option value="price-desc">Price: High to Low</option>
-                  <option value="rating-desc">Highest Rated</option>
+                  <option value="name-ASC">Name A-Z</option>
+                  <option value="name-DESC">Name Z-A</option>
+                  <option value="price-ASC">Price: Low to High</option>
+                  <option value="price-DESC">Price: High to Low</option>
+                  <option value="createdAt-DESC">Newest First</option>
+                  <option value="createdAt-ASC">Oldest First</option>
                 </select>
               </div>
             </div>
@@ -332,28 +285,30 @@ export default function ProductsListPage() {
           {/* Results Summary */}
           <div className="flex items-center justify-between mb-6">
             <div className="text-sm text-[var(--muted)]">
-              Showing {filteredProducts.length} of {Catalog.PRODUCTS.length} products
+              Showing {filteredProducts?.length || 0} of {totalProducts} products
             </div>
             
             {/* Mobile Sort - Quick Access */}
             <div className="sm:hidden">
               <select
-                value={sort}
-                onChange={(e) => setSort(e.target.value as SortKey)}
+                value={`${sortBy}-${sortDir}`}
+                onChange={(e) => {
+                  const [newSortBy, newSortDir] = e.target.value.split('-')
+                  setSortBy(newSortBy)
+                  setSortDir(newSortDir as 'ASC' | 'DESC')
+                }}
                 className="select text-sm"
               >
-                <option value="popularity">Popular</option>
-                <option value="newest">Newest</option>
-                <option value="best-sellers">Best Sellers</option>
-                <option value="price-asc">Price ↑</option>
-                <option value="price-desc">Price ↓</option>
-                <option value="rating-desc">Rating</option>
+                <option value="name-ASC">Name A-Z</option>
+                <option value="price-ASC">Price ↑</option>
+                <option value="price-DESC">Price ↓</option>
+                <option value="createdAt-DESC">Newest</option>
               </select>
             </div>
           </div>
 
           {/* Products Grid */}
-          {isLoading ? (
+          {loading ? (
             // Loading Skeleton
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (

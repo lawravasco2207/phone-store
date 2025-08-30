@@ -20,7 +20,32 @@
 import { useMemo, useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useToast } from './AlertToast'
-import type { Product } from '../utils/mockData'
+import type { Product } from '../utils/api'
+
+// Define product specs interface for comparison
+interface ProductSpecs {
+  [key: string]: string | number | boolean | null;
+}
+
+// Enhanced product interface with specs
+interface EnhancedProduct {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+  description?: string;
+  images?: string[];
+  Categories?: { name: string }[];
+  inventory?: number;
+  // Additional properties for comparison
+  brand: string;
+  thumbnail: string;
+  rating: {
+    average: number;
+    count: number;
+  };
+  specs: ProductSpecs;
+}
 
 interface CompareToolProps {
   products: Product[]
@@ -43,9 +68,57 @@ export default function CompareTool({
     setSelectedIds(initialSelected)
   }, [initialSelected])
   
-  const selectedProducts = useMemo<Product[]>(
-    () => products.filter(p => selectedIds.includes(p.id)), 
-    [products, selectedIds]
+  // Convert API products to enhanced products with specs
+  const enhancedProducts = useMemo<EnhancedProduct[]>(() => 
+    products.map(p => {
+      // Extract specifications from description and other fields
+      const descriptionSpecs: ProductSpecs = {}
+      
+      // Parse description for specs if available
+      if (p.description) {
+        // Simple extraction of specs from formatted description
+        // Format expected: "Key: Value, Key2: Value2"
+        const specRegex = /([^:,]+):\s*([^,]+)(?:,|$)/g;
+        let match;
+        
+        while ((match = specRegex.exec(p.description)) !== null) {
+          const key = match[1].trim();
+          const value = match[2].trim();
+          descriptionSpecs[key] = value;
+        }
+      }
+      
+      // Convert product to enhanced product with specs
+      return {
+        ...p,
+        // Generate a string ID if it's a number
+        id: String(p.id),
+        // Extract brand from name or use first word as brand
+        brand: p.name.split(' ')[0],
+        // Use first image as thumbnail or placeholder
+        thumbnail: p.images && p.images.length > 0 
+          ? p.images[0] 
+          : 'https://via.placeholder.com/150',
+        // Create dummy rating if not available
+        rating: {
+          average: 4.5, // Default rating
+          count: 10
+        },
+        // Combine extracted specs with fixed specs
+        specs: {
+          ...descriptionSpecs,
+          price: `$${p.price}`,
+          category: p.category || 'Unknown',
+          stock: p.inventory || (p.Inventory?.stock_quantity ?? 'In Stock')
+        }
+      };
+    }),
+    [products]
+  );
+  
+  const selectedProducts = useMemo<EnhancedProduct[]>(
+    () => enhancedProducts.filter(p => selectedIds.includes(p.id)), 
+    [enhancedProducts, selectedIds]
   )
 
   const toggle = (id: string) => {
@@ -71,7 +144,8 @@ export default function CompareTool({
 
   // Check if a spec value differs across products
   const isSpecDifferent = (key: string) => {
-    const values = selectedProducts.map(p => (p.specs as Record<string, unknown>)[key])
+    if (selectedProducts.length < 2) return false;
+    const values = selectedProducts.map(p => p.specs[key])
     return !values.every(val => val === values[0])
   }
 
@@ -102,7 +176,7 @@ export default function CompareTool({
       ['Rating', ...selectedProducts.map(p => `${p.rating.average}/5`)],
       ...specKeys.map(key => [
         key.charAt(0).toUpperCase() + key.slice(1),
-        ...selectedProducts.map(p => String((p.specs as Record<string, unknown>)[key] ?? '-'))
+        ...selectedProducts.map(p => String(p.specs[key] ?? '-'))
       ])
     ]
 
@@ -159,7 +233,7 @@ export default function CompareTool({
         {/* Product Selection Grid/List */}
         {viewMode === 'grid' ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {products.map(product => (
+            {enhancedProducts.map(product => (
               <label
                 key={product.id}
                 className={`cursor-pointer rounded-lg border-2 p-4 transition-all hover:shadow-md ${
@@ -193,7 +267,7 @@ export default function CompareTool({
           </div>
         ) : (
           <div className="space-y-2">
-            {products.map(product => (
+            {enhancedProducts.map(product => (
               <label
                 key={product.id}
                 className={`flex items-center gap-4 p-3 rounded-lg border cursor-pointer transition-all hover:shadow-sm ${
@@ -353,7 +427,7 @@ export default function CompareTool({
                       {key.replace(/([A-Z])/g, ' $1').trim()}
                     </td>
                     {selectedProducts.map(product => {
-                      const value = (product.specs as Record<string, unknown>)[key]
+                      const value = product.specs[key]
                       const isDifferent = isSpecDifferent(key)
                       return (
                         <td key={product.id} className="px-4 py-3">
@@ -379,7 +453,7 @@ export default function CompareTool({
                 </h4>
                 <div className="space-y-2">
                   {selectedProducts.map(product => {
-                    const value = (product.specs as Record<string, unknown>)[key]
+                    const value = product.specs[key]
                     const isDifferent = isSpecDifferent(key)
                     return (
                       <div key={product.id} className="flex items-center justify-between">

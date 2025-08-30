@@ -1,0 +1,244 @@
+/* Modern Chatbot Styling */
+.chatbot-container {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  width: 350px;
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  z-index: 1000;
+  max-height: 500px;
+}
+
+.chat-header {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: white;
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.chat-header button {
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.chat-header button:hover {
+  opacity: 1;
+}
+
+.chat-window {
+  flex: 1;
+  padding: 1rem;
+  overflow-y: auto;
+  max-height: 350px;
+  scroll-behavior: smooth;
+  background-color: #f9fafb;
+}
+
+.chat-welcome {
+  text-align: center;
+  padding: 1rem;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+  animation: fadeIn 0.5s ease;
+}
+
+.chat-welcome p {
+  margin: 0;
+}
+
+.chat-bubble {
+  position: relative;
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 1.25rem;
+  max-width: 85%;
+  word-wrap: break-word;
+  animation: bubbleIn 0.3s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.chat-bubble.user {
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
+  color: white;
+  margin-left: auto;
+  border-bottom-right-radius: 0.25rem;
+}
+
+.chat-bubble.bot {
+  background: white;
+  color: #374151;
+  margin-right: auto;
+  border-bottom-left-radius: 0.25rem;
+}
+
+.chat-bubble span {
+  white-space: pre-wrap;
+}
+
+.chat-bubble.typing {
+  display: flex;
+  align-items: center;
+  min-width: 60px;
+  min-height: 32px;
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  margin: 0 1px;
+  background-color: #6b7280;
+  border-radius: 50%;
+  display: inline-block;
+  animation: typing 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+.chat-input {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  border-top: 1px solid #e5e7eb;
+  background: white;
+}
+
+.chat-input input {
+  flex: 1;
+  border: 1px solid #e5e7eb;
+  border-radius: 1.25rem;
+  padding: 0.75rem 1rem;
+  outline: none;
+  margin-right: 0.5rem;
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease;
+}
+
+.chat-input input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.chat-input button {
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 1.25rem;
+  padding: 0.6rem 1.25rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-input button:hover {
+  background: #1d4ed8;
+}
+
+.chat-input button:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.chat-input button svg {
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 640px) {
+  .chatbot-container {
+    width: calc(100% - 2rem);
+    max-width: 100%;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    left: 0.5rem;
+  }
+}
+
+/* Animations */
+@keyframes bubbleIn {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes typing {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+/* Scroll Customization */
+.chat-window::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-window::-webkit-scrollbar-track {
+  background: #f9fafb;
+}
+
+.chat-window::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 20px;
+}
+
+/* Message Timestamps */
+.message-time {
+  font-size: 0.7rem;
+  opacity: 0.7;
+  margin-top: 4px;
+  display: block;
+  text-align: right;
+}

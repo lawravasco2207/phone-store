@@ -19,19 +19,24 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import CompareTool from '../components/CompareTool'
-import { Catalog, type CategoryName } from '../utils/mockData'
 import { useToast } from '../components/AlertToast'
+import { api } from '../utils/api'
+import type { Product } from '../utils/api'
+import { useCategories } from '../components/CategoryContext'
 
 export default function ComparePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { show } = useToast()
+  const { categories } = useCategories()
   
   // State management
-  const [category, setCategory] = useState<CategoryName | ''>(
-    searchParams.get('category') as CategoryName || ''
+  const [category, setCategory] = useState<string>(
+    searchParams.get('category') || ''
   )
   const [searchQuery, setSearchQuery] = useState(searchParams.get('q') || '')
   const [isGridView, setIsGridView] = useState(false)
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
   
   // Initialize selected products from URL
   const initialSelected = useMemo(() => {
@@ -39,23 +44,37 @@ export default function ComparePage() {
     return ids.slice(0, 4) // Limit to 4 products max
   }, [searchParams])
 
-  // Filter products based on category and search
-  const filteredProducts = useMemo(() => {
-    let products = category 
-      ? Catalog.PRODUCTS.filter(p => p.categories.includes(category))
-      : Catalog.PRODUCTS
-
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase()
-      products = products.filter(p => 
-        p.name.toLowerCase().includes(query) ||
-        p.brand.toLowerCase().includes(query) ||
-        p.description.toLowerCase().includes(query) ||
-        p.tags.some(tag => tag.toLowerCase().includes(query))
-      )
+  // Fetch products
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoading(true)
+      try {
+        const params: any = {}
+        
+        if (category) {
+          params.category = category
+        }
+        
+        if (searchQuery) {
+          params.search = searchQuery
+        }
+        
+        const response = await api.getProducts(params)
+        
+        if (response.success && response.data?.products) {
+          setProducts(response.data.products || [])
+        } else {
+          setProducts([])
+        }
+      } catch (error) {
+        console.error('Error fetching products for comparison:', error)
+        setProducts([])
+      } finally {
+        setLoading(false)
+      }
     }
-
-    return products
+    
+    fetchProducts()
   }, [category, searchQuery])
 
   // Update URL when filters change
@@ -173,11 +192,11 @@ export default function ComparePage() {
           <div className="sm:w-48">
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value as CategoryName | '')}
+              onChange={(e) => setCategory(e.target.value)}
               className="select w-full"
             >
               <option value="">All Categories</option>
-              {Catalog.CATEGORIES.map(cat => (
+              {categories.map(cat => (
                 <option key={cat.id} value={cat.name}>{cat.name}</option>
               ))}
             </select>
@@ -197,20 +216,27 @@ export default function ComparePage() {
         {/* Filter Summary */}
         <div className="flex items-center justify-between text-sm text-[var(--muted)]">
           <span>
-            {filteredProducts.length} product{filteredProducts.length !== 1 ? 's' : ''} available
+            {products.length} product{products.length !== 1 ? 's' : ''} available
             {category && ` in ${category}`}
             {searchQuery && ` matching "${searchQuery}"`}
           </span>
         </div>
       </div>
 
-      {/* Comparison Tool */}
-      <CompareTool 
-        products={filteredProducts} 
-        initialSelected={initialSelected}
-        onShare={handleShare}
-        viewMode={isGridView ? 'grid' : 'list'}
-      />
+      {/* Loading state */}
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-[var(--brand-primary)] border-r-transparent"></div>
+        </div>
+      ) : (
+        /* Comparison Tool */
+        <CompareTool 
+          products={products} 
+          initialSelected={initialSelected}
+          onShare={handleShare}
+          viewMode={isGridView ? 'grid' : 'list'}
+        />
+      )}
 
       {/* Help Section */}
       <div className="card p-4 bg-blue-50 border-blue-200">

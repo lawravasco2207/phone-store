@@ -1,3 +1,22 @@
+# Build and Dependencies
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Package files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+npm-shrinkwrap.json
+
+# Testing
+/coverage
+/test-results/
+/playwright-report/
+/playwright/.cache/
+vitest.coverage.json
+
 # Logs
 logs
 *.log
@@ -7,15 +26,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
-.idea
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -23,8 +40,32 @@ dist-ssr
 *.sln
 *.sw?
 
+# Environment variables
 .env
+.env.development
 .env.test
 .env.production
 .env.local
-.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# TypeScript
+*.tsbuildinfo
+.tscache/
+tsconfig.tsbuildinfo
+tsconfig.*.json.backup
+
+# Cache
+.eslintcache
+.stylelintcache
+.cache
+.parcel-cache
+.rollup.cache
+.temp
+
+# Generated files
+/generated
+/src/generated/
+stats.html

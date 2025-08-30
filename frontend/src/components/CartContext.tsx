@@ -1,72 +1,167 @@
-/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import type { Product } from '../utils/mockData'
-
-// Cart item includes product id and quantity; price is read from catalog to avoid duplication
-export type CartItem = {
-  id: string
-  qty: number
-}
+import { api, type Product, type CartItem } from '../utils/api'
+import { useAuth } from './AuthContext'
 
 type CartContextValue = {
   items: CartItem[]
   add: (product: Product, qty?: number) => void
+  addToCart: (productId: number, quantity: number) => Promise<boolean>
   remove: (id: string) => void
+  removeFromCart: (itemId: number) => Promise<boolean>
   setQty: (id: string, qty: number) => void
+  updateQuantity: (itemId: number, quantity: number) => Promise<boolean>
   clear: () => void
+  loading: boolean
+  syncWithBackend: () => Promise<void>
+  getCartTotal: () => number
+  getCartItemsCount: () => number
 }
 
 const CartContext = createContext<CartContextValue | null>(null)
 
-const STORAGE_KEY = 'phonestore.cart.v1'
-
 export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      return raw ? (JSON.parse(raw) as CartItem[]) : []
-    } catch (e) {
-      console.debug('Cart load failed', e)
-      return []
-    }
-  })
+  const { user } = useAuth()
+  const [items, setItems] = useState<CartItem[]>([])
+  const [loading, setLoading] = useState(false)
 
-  // Persist to localStorage on change for a realistic UX
+  // Load initial cart
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)) } catch (e) { console.debug('Cart save failed', e) }
+    if (user) {
+      syncWithBackend()
+    } else {
+      setItems([])
+    }
+  }, [user])
+
+  const syncWithBackend = useCallback(async () => {
+    if (!user) return
+    
+    setLoading(true)
+    try {
+      const response = await api.getCart()
+      if (response.success && response.data) {
+        setItems(response.data.items)
+      }
+    } catch (error) {
+      console.error('Failed to sync cart with backend:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [user])
+
+  const add = useCallback(async (product: Product, qty = 1) => {
+    if (user) {
+      await addToCart(product.id, qty)
+    }
+  }, [user])
+
+  const setQty = useCallback(async (id: string, qty: number) => {
+    if (user && items) {
+      const backendItem = items.find(item => item.Product.id.toString() === id)
+      if (backendItem) {
+        if (qty === 0) {
+          await removeFromCart(backendItem.id)
+        } else {
+          await updateQuantity(backendItem.id, qty)
+        }
+      }
+    }
+  }, [user, items])
+
+  const remove = useCallback((id: string) => setQty(id, 0), [setQty])
+  
+  const clear = useCallback(async () => {
+    if (user) {
+      try {
+        if (items && items.length > 0) {
+          await Promise.all(
+            items.map((item) => api.removeFromCart(item.id))
+          )
+        }
+        await syncWithBackend()
+      } catch (error) {
+        console.error('Failed to clear backend cart:', error)
+      }
+    } else {
+      setItems([])
+    }
+  }, [user, items, syncWithBackend])
+
+  const addToCart = useCallback(async (productId: number, quantity: number): Promise<boolean> => {
+    try {
+      const response = await api.addToCart(productId, quantity)
+      if (response.success) {
+        await syncWithBackend()
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Failed to add to cart:', error)
+      return false
+    }
+  }, [syncWithBackend])
+
+  const removeFromCart = useCallback(async (itemId: number): Promise<boolean> => {
+    try {
+      const response = await api.removeFromCart(itemId)
+      if (response.success) {
+        await syncWithBackend()
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Failed to remove from cart:', error)
+      return false
+    }
+  }, [syncWithBackend])
+
+  const updateQuantity = useCallback(async (itemId: number, quantity: number): Promise<boolean> => {
+    try {
+      const response = await api.updateCartItem(itemId, quantity)
+      if (response.success) {
+        await syncWithBackend()
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Failed to update cart quantity:', error)
+      return false
+    }
+  }, [syncWithBackend])
+
+  const getCartTotal = useCallback((): number => {
+    if (!items) return 0;
+    return items.reduce((total, item) => {
+      return total + (item.Product.price * item.quantity)
+    }, 0)
   }, [items])
 
-  // Add or increase quantity
-  const add = useCallback((product: Product, qty = 1) => {
-    setItems((prev) => {
-      const ix = prev.findIndex((i) => i.id === product.id)
-      if (ix >= 0) {
-        const next = [...prev]
-        next[ix] = { ...next[ix], qty: Math.min(99, next[ix].qty + qty) }
-        return next
-      }
-      return [...prev, { id: product.id, qty: Math.max(1, Math.min(99, qty)) }]
-    })
-  }, [])
+  const getCartItemsCount = useCallback((): number => {
+    if (!items) return 0;
+    return items.reduce((total, item) => {
+      return total + item.quantity
+    }, 0)
+  }, [items])
 
-  // Update quantity or drop when 0
-  const setQty = useCallback((id: string, qty: number) => {
-    setItems((prev) => {
-      const q = Math.max(0, Math.min(99, Math.floor(qty)))
-      if (q === 0) return prev.filter((i) => i.id !== id)
-      return prev.map((i) => (i.id === id ? { ...i, qty: q } : i))
-    })
-  }, [])
-
-  const remove = useCallback((id: string) => setItems((prev) => prev.filter((i) => i.id !== id)), [])
-  const clear = useCallback(() => setItems([]), [])
-
-  const value = useMemo<CartContextValue>(() => ({ items, add, remove, setQty, clear }), [items, add, remove, setQty, clear])
+  const value = useMemo<CartContextValue>(() => ({ 
+    items, 
+    add, 
+    addToCart,
+    remove, 
+    removeFromCart,
+    setQty, 
+    updateQuantity,
+    clear, 
+    loading,
+    syncWithBackend,
+    getCartTotal,
+    getCartItemsCount
+  }), [items, add, addToCart, remove, removeFromCart, setQty, updateQuantity, clear, loading, syncWithBackend, getCartTotal, getCartItemsCount])
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }
 
-export function useCart() {
+export function useCart(): CartContextValue {
   const ctx = useContext(CartContext)
   if (!ctx) throw new Error('useCart must be used within <CartProvider>')
   return ctx
