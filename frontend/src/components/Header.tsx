@@ -129,7 +129,7 @@ export default function Header() {
                   <span className="absolute -right-3 -top-2 rounded-full bg-[var(--brand-primary)] px-1.5 text-[10px] font-semibold text-white">{count}</span>
                 )}
               </NavLink>
-            </nav>
+            </nav> m
 
             {/* Auth section */}
             <div className="flex items-center gap-2">

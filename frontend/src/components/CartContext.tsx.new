@@ -170,8 +170,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         // User is logged in, use backend cart
         const response = await api.removeFromCart(itemId);
         if (response.success) {
-          // Immediately update local state
-          setItems(prevItems => prevItems.filter(item => item.id !== itemId));
+          await syncWithBackend();
           return true;
         }
         return false;
@@ -188,7 +187,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to remove from cart:', error);
       return false;
     }
-  }, [user, items, updateGuestCart]);
+  }, [user, syncWithBackend, items, updateGuestCart]);
 
   // Update quantity of item in cart
   const updateQuantity = useCallback(async (itemId: number, quantity: number): Promise<boolean> => {
@@ -197,21 +196,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         // User is logged in, use backend cart
         const response = await api.updateCartItem(itemId, quantity);
         if (response.success) {
-          // If response has item data, use it to update state
-          if (response.data?.item) {
-            setItems(prevItems => 
-              prevItems.map(item => 
-                item.id === itemId ? response.data!.item! : item
-              )
-            );
-          } else {
-            // Fallback to manual update
-            setItems(prevItems => 
-              prevItems.map(item => 
-                item.id === itemId ? { ...item, quantity } : item
-              )
-            );
-          }
+          await syncWithBackend();
           return true;
         }
         return false;
@@ -228,7 +213,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to update cart quantity:', error);
       return false;
     }
-  }, [user, items, updateGuestCart]);
+  }, [user, syncWithBackend, items, updateGuestCart]);
   
   // API-style add to cart (returns promise)
   const addToCart = useCallback(async (productId: number, quantity: number): Promise<boolean> => {
@@ -237,29 +222,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         // User is logged in, use backend cart
         const response = await api.addToCart(productId, quantity);
         if (response.success) {
-          // If response has data, update the local state immediately
-          if (response.data?.item) {
-            // Add new item or update existing one
-            const newItem = response.data.item;
-            setItems(prevItems => {
-              const existingItemIndex = prevItems.findIndex(item => 
-                item.id === newItem.id
-              );
-              
-              if (existingItemIndex >= 0) {
-                // Update existing item
-                const updatedItems = [...prevItems];
-                updatedItems[existingItemIndex] = newItem;
-                return updatedItems;
-              } else {
-                // Add new item
-                return [...prevItems, newItem];
-              }
-            });
-          } else {
-            // Fallback to getting the entire cart
-            syncWithBackend();
-          }
+          await syncWithBackend();
           return true;
         }
         return false;

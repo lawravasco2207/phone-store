@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice API Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #3b82f6;
+        }
+        .test-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .test-card h2 {
+            margin-top: 0;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 8px;
+        }
+        .status {
+            font-weight: bold;
+            margin-top: 12px;
+        }
+        .success {
+            color: #10b981;
+        }
+        .failure {
+            color: #ef4444;
+        }
+        .button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .button:hover {
+            background: #2563eb;
+        }
+        .button:disabled {
+            background: #93c5fd;
+            cursor: not-allowed;
+        }
+        .visualizer {
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 16px 0;
+        }
+        .bar {
+            width: 4px;
+            height: 5px;
+            background-color: #3b82f6;
+            margin: 0 1px;
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+        .browser-info {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="browser-info">
+        <strong>Browser Information:</strong>
+        <div id="userAgent"></div>
+    </div>
+
+    <h1>Voice API Browser Compatibility Test</h1>
+    <p>This page tests compatibility with the Web Speech API across different browsers.</p>
+
+    <div class="test-card">
+        <h2>SpeechRecognition (Voice Input)</h2>
+        <p>Tests if your browser supports speech recognition (listening to your voice).</p>
+        <button id="testRecognition" class="button">Test SpeechRecognition</button>
+        <div id="recognitionStatus" class="status">Not tested</div>
+        <div id="recognitionOutput"></div>
+        <div id="visualizer" class="visualizer">
+            <!-- Bars will be added by JavaScript -->
+        </div>
+    </div>
+
+    <div class="test-card">
+        <h2>SpeechSynthesis (Voice Output)</h2>
+        <p>Tests if your browser supports speech synthesis (speaking text).</p>
+        <button id="testSynthesis" class="button">Test SpeechSynthesis</button>
+        <div id="synthesisStatus" class="status">Not tested</div>
+        <div id="voicesInfo"></div>
+    </div>
+
+    <div class="test-card">
+        <h2>AudioContext (Voice Visualization)</h2>
+        <p>Tests if your browser supports Web Audio API for visualizing audio input.</p>
+        <button id="testAudioContext" class="button">Test AudioContext</button>
+        <div id="audioContextStatus" class="status">Not tested</div>
+    </div>
+
+    <script>
+        // Display browser information
+        document.getElementById('userAgent').textContent = navigator.userAgent;
+
+        // SpeechRecognition Test
+        const recognitionBtn = document.getElementById('testRecognition');
+        const recognitionStatus = document.getElementById('recognitionStatus');
+        const recognitionOutput = document.getElementById('recognitionOutput');
+        const visualizerEl = document.getElementById('visualizer');
+
+        // Create visualizer bars
+        for (let i = 0; i < 20; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            visualizerEl.appendChild(bar);
+        }
+
+        recognitionBtn.addEventListener('click', async () => {
+            recognitionStatus.textContent = 'Testing...';
+            recognitionStatus.className = 'status';
+            
+            try {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                
+                if (!SpeechRecognition) {
+                    throw new Error('SpeechRecognition not supported in this browser');
+                }
+                
+                const recognition = new SpeechRecognition();
+                recognition.continuous = false;
+                recognition.interimResults = true;
+                recognition.lang = 'en-US';
+                
+                recognition.onstart = () => {
+                    recognitionStatus.textContent = 'Listening...';
+                    recognitionStatus.className = 'status success';
+                    // Simulate visualizer
+                    animateVisualizer();
+                };
+                
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript;
+                    recognitionOutput.textContent = `Recognized: "${transcript}"`;
+                };
+                
+                recognition.onerror = (event) => {
+                    recognitionStatus.textContent = `Error: ${event.error}`;
+                    recognitionStatus.className = 'status failure';
+                    stopAnimatingVisualizer();
+                };
+                
+                recognition.onend = () => {
+                    recognitionStatus.textContent = 'Finished listening (Success)';
+                    recognitionStatus.className = 'status success';
+                    stopAnimatingVisualizer();
+                };
+                
+                recognition.start();
+                
+            } catch (error) {
+                recognitionStatus.textContent = `Failed: ${error.message}`;
+                recognitionStatus.className = 'status failure';
+                console.error('SpeechRecognition test failed:', error);
+            }
+        });
+        
+        // Visualizer animation
+        let visualizerAnimationId;
+        
+        function animateVisualizer() {
+            const bars = visualizerEl.querySelectorAll('.bar');
+            
+            function updateBars() {
+                bars.forEach(bar => {
+                    const height = Math.floor(Math.random() * 35) + 5;
+                    bar.style.height = `${height}px`;
+                });
+                
+                visualizerAnimationId = requestAnimationFrame(updateBars);
+            }
+            
+            updateBars();
+        }
+        
+        function stopAnimatingVisualizer() {
+            if (visualizerAnimationId) {
+                cancelAnimationFrame(visualizerAnimationId);
+                visualizerAnimationId = null;
+                
+                // Reset bars
+                const bars = visualizerEl.querySelectorAll('.bar');
+                bars.forEach(bar => {
+                    bar.style.height = '5px';
+                });
+            }
+        }
+
+        // SpeechSynthesis Test
+        const synthesisBtn = document.getElementById('testSynthesis');
+        const synthesisStatus = document.getElementById('synthesisStatus');
+        const voicesInfo = document.getElementById('voicesInfo');
+
+        synthesisBtn.addEventListener('click', () => {
+            synthesisStatus.textContent = 'Testing...';
+            synthesisStatus.className = 'status';
+            
+            try {
+                if (!('speechSynthesis' in window)) {
+                    throw new Error('SpeechSynthesis not supported in this browser');
+                }
+                
+                // Get available voices
+                const voices = window.speechSynthesis.getVoices();
+                const voicesList = voices.map(voice => 
+                    `${voice.name} (${voice.lang})${voice.default ? ' - DEFAULT' : ''}`
+                );
+                
+                // Display voices
+                if (voices.length > 0) {
+                    voicesInfo.innerHTML = `
+                        <p>Available voices (${voices.length}):</p>
+                        <ul>
+                            ${voicesList.map(v => `<li>${v}</li>`).join('')}
+                        </ul>
+                    `;
+                } else {
+                    voicesInfo.textContent = 'No voices available or still loading voices.';
+                    
+                    // In Chrome, voices might load asynchronously
+                    window.speechSynthesis.onvoiceschanged = () => {
+                        const updatedVoices = window.speechSynthesis.getVoices();
+                        const updatedList = updatedVoices.map(voice => 
+                            `${voice.name} (${voice.lang})${voice.default ? ' - DEFAULT' : ''}`
+                        );
+                        
+                        voicesInfo.innerHTML = `
+                            <p>Available voices (${updatedVoices.length}):</p>
+                            <ul>
+                                ${updatedList.map(v => `<li>${v}</li>`).join('')}
+                            </ul>
+                        `;
+                    };
+                }
+                
+                // Speak test
+                const utterance = new SpeechSynthesisUtterance('This is a test of speech synthesis in your browser');
+                
+                utterance.onstart = () => {
+                    synthesisStatus.textContent = 'Speaking...';
+                    synthesisStatus.className = 'status success';
+                };
+                
+                utterance.onend = () => {
+                    synthesisStatus.textContent = 'Finished speaking (Success)';
+                    synthesisStatus.className = 'status success';
+                };
+                
+                utterance.onerror = (event) => {
+                    synthesisStatus.textContent = `Error: ${event.error}`;
+                    synthesisStatus.className = 'status failure';
+                };
+                
+                window.speechSynthesis.speak(utterance);
+                
+            } catch (error) {
+                synthesisStatus.textContent = `Failed: ${error.message}`;
+                synthesisStatus.className = 'status failure';
+                console.error('SpeechSynthesis test failed:', error);
+            }
+        });
+
+        // AudioContext Test
+        const audioContextBtn = document.getElementById('testAudioContext');
+        const audioContextStatus = document.getElementById('audioContextStatus');
+
+        audioContextBtn.addEventListener('click', async () => {
+            audioContextStatus.textContent = 'Testing...';
+            audioContextStatus.className = 'status';
+            
+            try {
+                // Check if AudioContext is supported
+                if (typeof AudioContext !== 'function' && 
+                    typeof webkitAudioContext !== 'function') {
+                    throw new Error('AudioContext not supported in this browser');
+                }
+                
+                // Create audio context
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                const audioContext = new AudioContextClass();
+                
+                // Try to access microphone
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                // Create analyzer
+                const analyser = audioContext.createAnalyser();
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+                
+                // Success!
+                audioContextStatus.textContent = 'AudioContext works! (Success)';
+                audioContextStatus.className = 'status success';
+                
+                // Clean up
+                stream.getTracks().forEach(track => track.stop());
+                audioContext.close();
+                
+            } catch (error) {
+                audioContextStatus.textContent = `Failed: ${error.message}`;
+                audioContextStatus.className = 'status failure';
+                console.error('AudioContext test failed:', error);
+            }
+        });
+    </script>
+</body>
+</html>
