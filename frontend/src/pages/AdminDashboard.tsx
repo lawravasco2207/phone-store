@@ -3,7 +3,6 @@ import { useAuth } from '../components/AuthContext'
 import { api, type Product } from '../utils/api'
 import { formatPrice } from '../utils/format'
 import { useToast } from '../components/AlertToast'
-import { Link } from 'react-router-dom'
 
 // Simple mock data generation for charts; in real app, fetch from backend/analytics
 const mockSales = [3200, 4800, 2600, 5400, 6100, 7000, 8400, 7900, 9200, 8800, 9600, 11000]

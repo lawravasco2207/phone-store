@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import ChatBubble from "./chatBubble";
+import ChatBubble from "./ChatBubble";
 import { api } from "../../utils/api";
 import { useAuth } from "../AuthContext";
 import './chatStyles.css';

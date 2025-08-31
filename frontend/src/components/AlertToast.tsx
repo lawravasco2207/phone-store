@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { FadeTransition, SlideUpTransition } from './Transition'
+import { SlideUpTransition } from './Transition'
 
 // Toast message shape: minimal fields for a compact API
 export type Toast = {
