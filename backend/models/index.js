@@ -95,6 +95,8 @@ export const Review = sequelize.define('Review', {
 export const Inventory = sequelize.define('Inventory', {
   stock_quantity: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   restock_date: DataTypes.DATE,
+}, {
+  tableName: 'Inventories'  // Explicitly set the table name to match Sequelize's default pluralization
 });
 
 export const SupportTicket = sequelize.define('SupportTicket', {

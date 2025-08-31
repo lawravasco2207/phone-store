@@ -32,6 +32,26 @@
   --warning: #d97706; /* amber-600 */
   --error:   #dc2626; /* red-600 */
   --info:    var(--brand-primary);
+  
+  /* Mobile-friendly spacing */
+  --page-padding-x: 0.75rem;   /* default horizontal padding */
+  --page-padding-y: 1.5rem;    /* default vertical padding */
+  --card-spacing: 1rem;        /* default card padding */
+  --touch-target: 2.75rem;     /* minimum touch target size */
+  
+  /* Animation durations */
+  --transition-fast: 150ms;
+  --transition-normal: 300ms;
+  --transition-slow: 500ms;
+}
+
+/* Responsive adjustments for larger screens */
+@media (min-width: 640px) {
+  :root {
+    --page-padding-x: 1.5rem;
+    --page-padding-y: 2rem;
+    --card-spacing: 1.5rem;
+  }
 }
 
 html,
@@ -42,6 +62,27 @@ body,
 
 body {
   font-family: var(--app-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+  background-color: var(--bg);
+}
+
+/* Mobile-friendly typography sizing */
+h1 { font-size: 1.75rem; line-height: 1.2; font-weight: 700; }
+h2 { font-size: 1.5rem; line-height: 1.25; font-weight: 700; }
+h3 { font-size: 1.25rem; line-height: 1.3; font-weight: 600; }
+h4 { font-size: 1.125rem; line-height: 1.4; font-weight: 600; }
+h5, h6 { font-size: 1rem; line-height: 1.5; font-weight: 600; }
+
+/* Adjust typography for larger screens */
+@media (min-width: 768px) {
+  h1 { font-size: 2rem; }
+  h2 { font-size: 1.75rem; }
+  h3 { font-size: 1.5rem; }
+  h4 { font-size: 1.25rem; }
 }
 
 /* Simple container utility without @apply to avoid CSS parser warnings */
@@ -50,8 +91,9 @@ body {
   margin-right: auto;
   max-width: 80rem; /* ~1280px */
   /* Slightly tighter gutters on small screens for more content width */
-  padding-left: 0.75rem;
-  padding-right: 0.75rem;
+  padding-left: var(--page-padding-x);
+  padding-right: var(--page-padding-x);
+  width: 100%;
 }
 
 /* Minimal focus utility (fallback; we also use native focus styles) */
@@ -69,6 +111,45 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Animation utilities */
+.animate-fade-in {
+  animation: fadeIn var(--transition-normal) ease-in-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp var(--transition-normal) ease-in-out forwards;
+}
+
+.animate-slide-down {
+  animation: slideDown var(--transition-normal) ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 /*
   Minimal UI primitives (no @apply to keep parser quiet). These classes
   standardize colors and spacing across the app while keeping Tailwind-first layout.
@@ -83,8 +164,16 @@ html {
   border: 1px solid transparent;
   border-radius: 0.5rem; /* rounded-lg */
   padding: 0.5rem 1rem; /* py-2 px-4 */
+  transition: background-color var(--transition-fast) ease-in-out, 
+              transform var(--transition-fast) ease-in-out;
 }
-.btn-primary:hover { background-color: var(--brand-primary-700); }
+.btn-primary:hover { 
+  background-color: var(--brand-primary-700); 
+  transform: translateY(-1px);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .btn-outline {
@@ -93,18 +182,39 @@ html {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.5rem 1rem;
+  transition: background-color var(--transition-fast) ease-in-out,
+              border-color var(--transition-fast) ease-in-out;
 }
-.btn-outline:hover { background-color: rgba(15, 23, 42, 0.03); }
+.btn-outline:hover { 
+  background-color: rgba(15, 23, 42, 0.03);
+  border-color: rgba(15, 23, 42, 0.2);
+}
 
 .input, .select, .textarea {
   border: 1px solid var(--border);
   border-radius: 0.375rem; /* rounded-md */
   padding: 0.5rem 0.75rem; /* py-2 px-3 */
   background-color: #fff;
+  transition: border-color var(--transition-fast) ease-in-out,
+              box-shadow var(--transition-fast) ease-in-out;
+  width: 100%;
+}
+.input:hover, .select:hover, .textarea:hover {
+  border-color: rgba(79, 70, 229, 0.4);
 }
 .input:focus, .select:focus, .textarea:focus {
   outline: 2px solid var(--brand-primary);
   outline-offset: 2px;
+  border-color: var(--brand-primary);
+}
+
+/* Mobile-friendly touch targets */
+@media (max-width: 640px) {
+  .input, .select, .textarea, .btn-primary, .btn-outline {
+    min-height: var(--touch-target);
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+  }
 }
 
 .card {
@@ -112,4 +222,10 @@ html {
   border: 1px solid var(--border);
   border-radius: 0.5rem; /* rounded-lg */
   box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  transition: box-shadow var(--transition-normal) ease-in-out,
+              transform var(--transition-normal) ease-in-out;
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }

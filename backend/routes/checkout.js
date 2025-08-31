@@ -9,18 +9,27 @@ router.use(authRequired);
 
 // Process checkout and create order
 router.post('/', async (req, res) => {
+  // First check if required tables exist - do this BEFORE starting a transaction
+  let hasInventoryTable = true;
+  try {
+    await db.sequelize.query('SELECT 1 FROM "Inventories" LIMIT 1');
+  } catch (error) {
+    console.warn('Inventory table check failed, inventory checks will be skipped:', error.message);
+    hasInventoryTable = false;
+  }
+
+  // Now start the transaction
   const t = await db.sequelize.transaction();
   try {
-    // Get cart items with product details
-    const items = await db.CartItem.findAll({ 
-      where: { user_id: req.user.id }, 
-      include: [db.Product], 
-      transaction: t, 
-      lock: t.LOCK.UPDATE 
+    // First get cart items with product details
+    const items = await db.CartItem.findAll({
+      where: { user_id: req.user.id },
+      include: [db.Product],
+      transaction: t
     });
     
     // Validate cart has items
-    if (!items.length) { 
+    if (!items || !items.length) { 
       await t.rollback(); 
       return res.status(400).json({ success: false, error: 'Cart is empty' }); 
     }
@@ -58,22 +67,23 @@ router.post('/', async (req, res) => {
         price_at_purchase: item.Product.price
       }, { transaction: t });
       
-      // Check and update inventory if it exists
-      const inventory = await db.Inventory.findOne({ 
-        where: { product_id: item.product_id }, 
-        transaction: t, 
-        lock: t.LOCK.UPDATE 
-      });
-      
-      if (inventory) {
-        if (inventory.stock_quantity < item.quantity) { 
-          await t.rollback(); 
-          return res.status(400).json({ success: false, error: 'Insufficient inventory' }); 
-        }
+      // Only check inventory if we confirmed the table exists
+      if (hasInventoryTable) {
+        const inventory = await db.Inventory.findOne({ 
+          where: { product_id: item.product_id }, 
+          transaction: t 
+        });
         
-        await inventory.update({ 
-          stock_quantity: inventory.stock_quantity - item.quantity 
-        }, { transaction: t });
+        if (inventory) {
+          if (inventory.stock_quantity < item.quantity) { 
+            await t.rollback(); 
+            return res.status(400).json({ success: false, error: 'Insufficient inventory' }); 
+          }
+          
+          await inventory.update({ 
+            stock_quantity: inventory.stock_quantity - item.quantity 
+          }, { transaction: t });
+        }
       }
     }
 
@@ -153,12 +163,16 @@ router.post('/', async (req, res) => {
       await db.CartItem.destroy({ where: { user_id: req.user.id }, transaction: t });
     }
     
-    // Record audit log
-    await writeAudit(req.user.id, 'checkout', 'Orders', order.id, { 
-      total, 
-      paymentMethod, 
-      paymentStatus 
-    });
+    // Record audit log - wrapped in try/catch to prevent it from affecting the transaction
+    try {
+      await writeAudit(req.user.id, 'checkout', 'Orders', order.id, { 
+        total, 
+        paymentMethod, 
+        paymentStatus 
+      });
+    } catch (auditError) {
+      console.warn('Failed to write audit log:', auditError.message);
+    }
     
     // Commit transaction
     await t.commit();

@@ -138,7 +138,7 @@ export default function ProductsListPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header - responsive adjustments */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text)]">Products</h1>
@@ -148,15 +148,15 @@ export default function ProductsListPage() {
           </p>
         </div>
         
-        {/* Mobile filter toggle */}
+        {/* Mobile filter toggle - improved visibility and touch target */}
         <button
           onClick={() => setFiltersOpen(!filtersOpen)}
-          className="sm:hidden btn-outline flex items-center gap-2"
+          className="sm:hidden btn-outline flex items-center justify-center gap-2 w-full py-3"
         >
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.414A1 1 0 013 6.707V4z" />
           </svg>
-          Filters
+          {filtersOpen ? 'Hide Filters' : 'Show Filters'}
           {activeFiltersCount > 0 && (
             <span className="rounded-full bg-[var(--brand-primary)] px-2 py-1 text-xs text-white">
               {activeFiltersCount}
@@ -165,7 +165,7 @@ export default function ProductsListPage() {
         </button>
       </div>
 
-      {/* Search Bar */}
+      {/* Search Bar - improved for mobile */}
       <div className="relative">
         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
           <svg className="h-5 w-5 text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -174,15 +174,16 @@ export default function ProductsListPage() {
         </div>
         <input
           type="text"
-          placeholder="Search products by name, category, description..."
+          placeholder="Search products..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="input w-full pl-10 pr-4 py-3"
+          className="input w-full pl-10 pr-10 py-3 text-base"
         />
         {query && (
           <button
             onClick={() => setQuery('')}
             className="absolute inset-y-0 right-0 pr-3 flex items-center"
+            aria-label="Clear search"
           >
             <svg className="h-5 w-5 text-[var(--muted)] hover:text-[var(--text)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -191,12 +192,12 @@ export default function ProductsListPage() {
         )}
       </div>
 
-      {/* Quick Filter Categories */}
+      {/* Quick Filter Categories - horizontal scrolling on mobile */}
       {categories.length > 0 && (
-        <div className="hidden sm:flex flex-wrap gap-2">
+        <div className="flex overflow-x-auto pb-2 snap-x scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap sm:gap-2">
           <button
             onClick={() => setCategory('')}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+            className={`snap-start flex-shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors mr-2 sm:mr-0 ${
               !category
                 ? 'bg-[var(--brand-primary)] text-white'
                 : 'bg-gray-100 text-[var(--text)] hover:bg-gray-200'
@@ -204,11 +205,11 @@ export default function ProductsListPage() {
           >
             All Categories
           </button>
-          {categories.slice(0, 5).map(cat => (
+          {categories.map(cat => (
             <button
               key={cat}
               onClick={() => setCategory(category === cat ? '' : cat)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+              className={`snap-start flex-shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors mr-2 sm:mr-0 ${
                 category === cat
                   ? 'bg-[var(--brand-primary)] text-white'
                   : 'bg-gray-100 text-[var(--text)] hover:bg-gray-200'
@@ -221,19 +222,35 @@ export default function ProductsListPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Filters Sidebar */}
-        <aside className={`lg:col-span-1 space-y-4 ${filtersOpen ? 'block' : 'hidden'} sm:block`}>
+        {/* Filters Sidebar - slides in from bottom on mobile */}
+        <aside className={`lg:col-span-1 space-y-4 ${
+          filtersOpen 
+            ? 'fixed inset-x-0 bottom-0 z-50 bg-white border-t border-gray-200 rounded-t-xl p-4 shadow-lg transform transition-transform duration-300 ease-in-out translate-y-0 sm:static sm:transform-none sm:shadow-none sm:border-t-0 sm:p-0' 
+            : 'fixed inset-x-0 bottom-0 z-50 bg-white border-t border-gray-200 rounded-t-xl p-4 shadow-lg transform transition-transform duration-300 ease-in-out translate-y-full sm:static sm:transform-none sm:shadow-none sm:border-t-0 sm:p-0'
+        } sm:block sm:transform-none`}>
           <div className="card p-4">
+            {/* Mobile filter header with close button */}
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-[var(--text)]">Filters</h2>
-              {activeFiltersCount > 0 && (
-                <button
-                  onClick={clearAllFilters}
-                  className="text-sm text-[var(--brand-primary)] hover:text-[var(--brand-primary-700)]"
+              <div className="flex gap-4 items-center">
+                {activeFiltersCount > 0 && (
+                  <button
+                    onClick={clearAllFilters}
+                    className="text-sm text-[var(--brand-primary)] hover:text-[var(--brand-primary-700)]"
+                  >
+                    Clear all
+                  </button>
+                )}
+                <button 
+                  onClick={() => setFiltersOpen(false)}
+                  className="sm:hidden text-gray-500 hover:text-gray-700" 
+                  aria-label="Close filters"
                 >
-                  Clear all
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
-              )}
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -245,7 +262,7 @@ export default function ProductsListPage() {
                 <select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="select w-full"
+                  className="select w-full py-3 text-base sm:py-2 sm:text-sm"
                 >
                   <option value="">All categories</option>
                   {categories.map(cat => (
@@ -266,7 +283,7 @@ export default function ProductsListPage() {
                     setSortBy(newSortBy)
                     setSortDir(newSortDir as 'ASC' | 'DESC')
                   }}
-                  className="select w-full"
+                  className="select w-full py-3 text-base sm:py-2 sm:text-sm"
                 >
                   <option value="name-ASC">Name A-Z</option>
                   <option value="name-DESC">Name Z-A</option>
@@ -276,13 +293,21 @@ export default function ProductsListPage() {
                   <option value="createdAt-ASC">Oldest First</option>
                 </select>
               </div>
+              
+              {/* Apply Filters Button (Mobile Only) */}
+              <button
+                onClick={() => setFiltersOpen(false)}
+                className="sm:hidden w-full py-3 bg-[var(--brand-primary)] text-white rounded-md hover:bg-[var(--brand-primary-700)] transition-colors mt-4"
+              >
+                Apply Filters
+              </button>
             </div>
           </div>
         </aside>
 
         {/* Products Grid */}
         <main className="lg:col-span-3">
-          {/* Results Summary */}
+          {/* Results Summary - improved for mobile */}
           <div className="flex items-center justify-between mb-6">
             <div className="text-sm text-[var(--muted)]">
               Showing {filteredProducts?.length || 0} of {totalProducts} products
@@ -297,7 +322,8 @@ export default function ProductsListPage() {
                   setSortBy(newSortBy)
                   setSortDir(newSortDir as 'ASC' | 'DESC')
                 }}
-                className="select text-sm"
+                className="select text-sm py-2"
+                aria-label="Sort products"
               >
                 <option value="name-ASC">Name A-Z</option>
                 <option value="price-ASC">Price ↑</option>
@@ -307,9 +333,9 @@ export default function ProductsListPage() {
             </div>
           </div>
 
-          {/* Products Grid */}
+          {/* Products Grid - responsive grids */}
           {loading ? (
-            // Loading Skeleton
+            // Loading Skeleton - responsive
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="animate-pulse card overflow-hidden">
@@ -323,32 +349,108 @@ export default function ProductsListPage() {
               ))}
             </div>
           ) : filteredProducts.length === 0 ? (
-            // Empty State
-            <div className="text-center py-16">
+            // Empty State - mobile optimized
+            <div className="text-center py-12 sm:py-16">
               <svg className="mx-auto h-16 w-16 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9.172 16.172a4 4 0 015.656 0M9 12h6m-6-4h6m2 5.291A7.962 7.962 0 0112 15c-2.34 0-4.29-1.175-5.5-3.071A7.963 7.963 0 016 9c0-5.385 4.365-9.75 9.75-9.75S25.5 3.615 25.5 9a7.963 7.963 0 01-.5 3.071c-1.21 1.896-3.16 3.071-5.5 3.071z" />
               </svg>
               <h3 className="mt-4 text-lg font-medium text-[var(--text)]">No products found</h3>
-              <p className="mt-2 text-[var(--muted)]">
+              <p className="mt-2 text-[var(--muted)] px-4">
                 Try adjusting your filters or search terms to find what you're looking for.
               </p>
               <button
                 onClick={clearAllFilters}
-                className="mt-4 btn-primary"
+                className="mt-6 py-3 px-6 btn-primary"
               >
                 Clear all filters
               </button>
             </div>
           ) : (
-            // Products Grid
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredProducts.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-            </div>
+            <>
+              {/* Products Grid - responsive grid with proper spacing */}
+              <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 xl:grid-cols-3">
+                {filteredProducts.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+              
+              {/* Pagination - more touch-friendly on mobile */}
+              {totalProducts > 12 && (
+                <div className="mt-8 flex justify-center">
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <button
+                      onClick={() => setPage(Math.max(1, page - 1))}
+                      disabled={page === 1}
+                      className={`rounded-md px-2 sm:px-3 py-2.5 sm:py-2 text-sm font-medium ${
+                        page === 1
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-100 text-[var(--text)] hover:bg-gray-200'
+                      }`}
+                    >
+                      <span className="hidden sm:inline">Previous</span>
+                      <span className="sm:hidden">Prev</span>
+                    </button>
+                    
+                    {Array.from({ length: Math.min(5, Math.ceil(totalProducts / 12)) }, (_, i) => {
+                      // Show page numbers around current page
+                      let pageNumber;
+                      const totalPages = Math.ceil(totalProducts / 12);
+                      
+                      if (totalPages <= 5) {
+                        // Show all pages if 5 or fewer
+                        pageNumber = i + 1;
+                      } else if (page <= 3) {
+                        // At start, show first 5 pages
+                        pageNumber = i + 1;
+                      } else if (page >= totalPages - 2) {
+                        // At end, show last 5 pages
+                        pageNumber = totalPages - 4 + i;
+                      } else {
+                        // In middle, show current page and 2 on each side
+                        pageNumber = page - 2 + i;
+                      }
+                      
+                      return (
+                        <button
+                          key={pageNumber}
+                          onClick={() => setPage(pageNumber)}
+                          className={`rounded-md w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-sm font-medium ${
+                            page === pageNumber
+                              ? 'bg-[var(--brand-primary)] text-white'
+                              : 'bg-gray-100 text-[var(--text)] hover:bg-gray-200'
+                          }`}
+                        >
+                          {pageNumber}
+                        </button>
+                      );
+                    })}
+                    
+                    <button
+                      onClick={() => setPage(Math.min(Math.ceil(totalProducts / 12), page + 1))}
+                      disabled={page >= Math.ceil(totalProducts / 12)}
+                      className={`rounded-md px-2 sm:px-3 py-2.5 sm:py-2 text-sm font-medium ${
+                        page >= Math.ceil(totalProducts / 12)
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-100 text-[var(--text)] hover:bg-gray-200'
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </main>
       </div>
+      
+      {/* Overlay backdrop when mobile filters are open */}
+      {filtersOpen && (
+        <div 
+          className="fixed inset-0 bg-black/30 z-40 sm:hidden transition-opacity duration-300"
+          onClick={() => setFiltersOpen(false)}
+        />
+      )}
     </div>
   )
 }

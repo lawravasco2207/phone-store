@@ -247,8 +247,8 @@ class ApiClient {
     return this.request<{ items: CartItem[] }>('/cart');
   }
 
-  async addToCart(productId: number, quantity: number = 1): Promise<ApiResponse> {
-    const response = await this.request('/cart', {
+  async addToCart(productId: number, quantity: number = 1): Promise<ApiResponse<{ item?: CartItem }>> {
+    const response = await this.request<{ item?: CartItem }>('/cart', {
       method: 'POST',
       body: JSON.stringify({ productId, quantity }),
     });
@@ -258,8 +258,8 @@ class ApiClient {
     return response;
   }
 
-  async updateCartItem(itemId: number, quantity: number): Promise<ApiResponse> {
-    const response = await this.request(`/cart/${itemId}`, {
+  async updateCartItem(itemId: number, quantity: number): Promise<ApiResponse<{ item?: CartItem }>> {
+    const response = await this.request<{ item?: CartItem }>(`/cart/${itemId}`, {
       method: 'PATCH',
       body: JSON.stringify({ quantity }),
     });
@@ -376,6 +376,42 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ message, userId }),
     });
+  }
+  
+  // Chat with tool calls
+  async chatWithToolCalls(message: string, userId?: number): Promise<ApiResponse<{ 
+    reply?: string;
+    message?: string;
+    toolCalls?: Array<{
+      id: string;
+      type: string;
+      function: {
+        name: string;
+        arguments: Record<string, any>;
+      };
+    }>;
+  }>> {
+    return this.request<{ 
+      reply?: string;
+      message?: string;
+      toolCalls?: Array<{
+        id: string;
+        type: string;
+        function: {
+          name: string;
+          arguments: Record<string, any>;
+        };
+      }>;
+    }>('/chat/with-tools', {
+      method: 'POST',
+      body: JSON.stringify({ message, userId }),
+    });
+  }
+  
+  // Initiate checkout
+  async initiateCheckout(): Promise<ApiResponse> {
+    // Open the checkout view, no API call needed here
+    return { success: true };
   }
 
   // Payment methods

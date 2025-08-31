@@ -130,10 +130,10 @@ export default function ProductCard({
           )}
         </Link>
         
-        {/* Favorite Heart Button - positioned for easy thumb access on mobile */}
+        {/* Favorite Heart Button - increased size on mobile for better touch target */}
         <button
           onClick={handleFavoriteToggle}
-          className={`absolute right-3 top-3 rounded-full p-2 shadow-md transition-all duration-200 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:ring-offset-2 ${
+          className={`absolute right-3 top-3 rounded-full p-2 sm:p-2 w-10 h-10 sm:w-auto sm:h-auto shadow-md transition-all duration-200 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:ring-offset-2 ${
             isFavorited 
               ? 'bg-red-500 text-white hover:bg-red-600' 
               : 'bg-white/90 text-gray-600 hover:bg-white hover:text-red-500'
@@ -141,12 +141,12 @@ export default function ProductCard({
           aria-label={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
           aria-pressed={isFavorited}
         >
-          <svg className="h-4 w-4" fill={isFavorited ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-5 w-5 sm:h-4 sm:w-4" fill={isFavorited ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
           </svg>
         </button>
         
-        {/* Stock Status Badge */}
+        {/* Stock Status Badge - more visible on mobile */}
         {product.Inventory && product.Inventory.stock_quantity <= 5 && product.Inventory.stock_quantity > 0 && (
           <div className="absolute left-3 top-3">
             <span className="rounded-full bg-orange-100 text-orange-800 px-2 py-1 text-xs font-medium shadow-sm">
@@ -164,16 +164,16 @@ export default function ProductCard({
         )}
       </div>
 
-      {/* Product Information Section */}
-      <div className="p-4">
+      {/* Product Information Section - improved spacing for mobile */}
+      <div className="p-4 sm:p-4">
         {/* Category */}
         <p className="text-sm font-medium text-[var(--muted)] mb-1">{product.category}</p>
         
-        {/* Product Name with proper heading hierarchy */}
+        {/* Product Name with proper heading hierarchy - larger font on mobile for readability */}
         <Link to={`/products/${product.id}`} className="block">
           <h3 
             id={`product-title-${product.id}`}
-            className="font-semibold text-[var(--text)] line-clamp-2 group-hover:text-[var(--brand-primary)] transition-colors duration-200 leading-tight"
+            className="text-base sm:text-base font-semibold text-[var(--text)] line-clamp-2 group-hover:text-[var(--brand-primary)] transition-colors duration-200 leading-tight"
           >
             {product.name}
           </h3>
@@ -186,24 +186,24 @@ export default function ProductCard({
           </p>
         )}
         
-        {/* Price and Actions Row */}
+        {/* Price and Actions Row - improved spacing and visibility on mobile */}
         <div className="flex items-center justify-between mt-4">
           <div className="flex items-baseline gap-2">
-            <span className="text-xl font-bold text-[var(--text)]">
+            <span className="text-lg sm:text-xl font-bold text-[var(--text)]">
               {formatPrice(product.price)}
             </span>
           </div>
           
-          {/* Quick Actions - hidden by default, shown on hover for desktop */}
+          {/* Quick Actions - always visible on mobile with larger touch targets */}
           {showQuickActions && (
-            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 sm:opacity-100 sm:group-hover:opacity-100">
+            <div className="flex items-center gap-2 opacity-100 transition-opacity duration-200">
               <Link
                 to={`/products/${product.id}`}
-                className="rounded-lg border border-[var(--border)] p-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:ring-offset-2 transition-colors"
+                className="rounded-lg border border-[var(--border)] p-2.5 sm:p-2 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:ring-offset-2 transition-colors"
                 aria-label={`View details for ${product.name}`}
                 title="View details"
               >
-                <svg className="h-4 w-4 text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-5 w-5 sm:h-4 sm:w-4 text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
@@ -212,11 +212,11 @@ export default function ProductCard({
               <button 
                 onClick={handleAddToCart}
                 disabled={product.Inventory?.stock_quantity === 0}
-                className="rounded-lg bg-[var(--brand-primary)] p-2 text-white hover:bg-[var(--brand-primary-700)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded-lg bg-[var(--brand-primary)] p-2.5 sm:p-2 text-white hover:bg-[var(--brand-primary-700)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label={`Add ${product.name} to cart`}
                 title="Add to cart"
               >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-5 w-5 sm:h-4 sm:w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
               </button>
