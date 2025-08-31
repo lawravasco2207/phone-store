@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { FadeTransition, SlideUpTransition } from './Transition'
 
 // Toast message shape: minimal fields for a compact API
 export type Toast = {
@@ -70,9 +71,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-  {/* Visual layer: fixed portal-like container at bottom-right on desktop, full-width on mobile */}
+      {/* Visual layer: fixed portal-like container at bottom on mobile, bottom-right on desktop */}
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch gap-2 p-3 sm:inset-auto sm:bottom-6 sm:right-6 sm:w-96"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-[1000] flex flex-col items-stretch gap-3 p-4 sm:inset-auto sm:bottom-6 sm:right-6 sm:w-96"
         aria-live="polite" // announce updates for screen readers
         role="status"
       >
@@ -98,23 +99,51 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
       : 'bg-[var(--info)]'
 
   return (
-    <div
-  className={`pointer-events-auto overflow-hidden rounded-lg shadow-lg transition-all ${color} text-white`} // colorized container via tokens
-    >
-      <div className="flex items-start gap-3 p-3">
-        <div className="flex-1">
-          {toast.title && <p className="font-semibold leading-5">{toast.title}</p>}
-          <p className="text-sm/5 opacity-95">{toast.message}</p>
+    <SlideUpTransition show={true} duration={400} className="w-full">
+      <div 
+        className={`pointer-events-auto overflow-hidden rounded-lg shadow-lg ${color} text-white w-full max-w-full`}
+      >
+        <div className="flex items-start gap-3 p-4">
+          {/* Icon indicators for toast types */}
+          <div className="shrink-0 pt-0.5">
+            {toast.variant === 'success' && (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+            {toast.variant === 'error' && (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            {toast.variant === 'warning' && (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            )}
+            {toast.variant === 'info' && (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+          </div>
+          
+          <div className="flex-1">
+            {toast.title && <p className="font-semibold leading-5">{toast.title}</p>}
+            <p className="text-base/5 sm:text-sm/5 opacity-95">{toast.message}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1.5 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white h-8 w-8 flex items-center justify-center"
+            aria-label="Dismiss notification"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-        <button
-          onClick={onClose}
-          className="rounded-md p-1 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          aria-label="Dismiss notification"
-        >
-          ×
-        </button>
       </div>
-    </div>
+    </SlideUpTransition>
   )
 }
 
