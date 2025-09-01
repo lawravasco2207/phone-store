@@ -1,8 +1,19 @@
 // Public product APIs: list with filters/pagination and fetch by id.
 import express from 'express';
 import db from '../models/index.js';
+import expressPkg from 'express';
 
 const router = express.Router();
+
+// Lightweight routes index for AI awareness (only this router's routes)
+router.get('/__routes', (_req, res) => {
+  return res.json({ success: true, data: [
+    'GET /api/products',
+    'GET /api/products/:id',
+    'GET /api/products/search',
+    'GET /api/products/__routes'
+  ]});
+});
 
 // GET /api/products
 router.get('/', async (req, res) => {

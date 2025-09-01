@@ -56,6 +56,21 @@ export type Review = {
 };
 
 // Create a reusable fetch function with error handling
+function getSessionId(): string | null {
+  // Prefer cookie 'sid'
+  const m = document.cookie.match(/(?:^|; )sid=([^;]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  // Fallback to localStorage
+  return localStorage.getItem('sid');
+}
+
+function setSessionId(id: string) {
+  try { localStorage.setItem('sid', id); } catch {}
+  // Also set a cookie for server compatibility
+  const isSecure = window.location.protocol === 'https:';
+  document.cookie = `sid=${encodeURIComponent(id)}; Path=/; Max-Age=${60*60*24*30}; SameSite=${isSecure ? 'None' : 'Lax'};${isSecure ? ' Secure;' : ''}`;
+}
+
 async function fetchWithErrorHandling<T>(url: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
   try {
     // Add default headers if not provided
@@ -67,6 +82,10 @@ async function fetchWithErrorHandling<T>(url: string, options: RequestInit = {})
 
     // Add credentials for cookies
     options.credentials = 'include';
+
+    // Attach session header if available
+    const sid = getSessionId();
+    (options.headers as Record<string, string>)['X-Session-Id'] = sid || '';
 
     // Make the request
     const response = await fetch(url, options);
@@ -90,7 +109,11 @@ async function fetchWithErrorHandling<T>(url: string, options: RequestInit = {})
     }
 
     // Parse the response
-    const data = await response.json();
+  const data = await response.json();
+  // Capture session id from response (if any)
+  const anyData = data as any;
+  const newSid = anyData?.data?.sessionId || anyData?.sessionId;
+  if (typeof newSid === 'string' && newSid) setSessionId(newSid);
     return data;
   } catch (error) {
     console.error('API request failed:', error);
@@ -371,41 +394,83 @@ class ApiClient {
   }
 
   // Chat
-  async chat(message: string, userId?: number): Promise<ApiResponse<{ reply: string }>> {
-    return this.request<{ reply: string }>('/chat', {
+  async chat(message: string, userId?: number): Promise<ApiResponse<{ reply?: string; products?: Product[] }>> {
+    return this.request<{ reply?: string; products?: Product[] }>('/chat', {
       method: 'POST',
       body: JSON.stringify({ message, userId }),
     });
   }
   
   // Chat with tool calls
-  async chatWithToolCalls(message: string, userId?: number): Promise<ApiResponse<{ 
-    reply?: string;
+  async chatWithToolCalls(message: string, userId?: number): Promise<ApiResponse<{
     message?: string;
+    products?: Product[];
     toolCalls?: Array<{
       id: string;
       type: string;
-      function: {
-        name: string;
-        arguments: Record<string, any>;
-      };
+      function: { name: string; arguments: any };
     }>;
+    reply?: string; // Some endpoints may use reply instead of message
   }>> {
-    return this.request<{ 
-      reply?: string;
+    return this.request<{
       message?: string;
+      products?: Product[];
       toolCalls?: Array<{
         id: string;
         type: string;
-        function: {
-          name: string;
-          arguments: Record<string, any>;
-        };
+        function: { name: string; arguments: any };
       }>;
+      reply?: string;
     }>('/chat/with-tools', {
       method: 'POST',
       body: JSON.stringify({ message, userId }),
     });
+  }
+
+  // AI memory endpoints
+  async getMemory(limit = 30): Promise<ApiResponse<any[]>> {
+    const sid = getSessionId();
+    if (!sid) return { success: true, data: [] as any };
+    return this.request<any[]>(`/ai/session/${sid}/memory?limit=${limit}`);
+  }
+
+  async addMemory(role: 'user' | 'assistant' | 'system' | 'tool', content: string, tool_calls?: any): Promise<ApiResponse> {
+    let sid = getSessionId();
+    if (!sid) { sid = Math.random().toString(36).slice(2); setSessionId(sid); }
+    return this.request(`/ai/session/${sid}/memory`, {
+      method: 'POST',
+      body: JSON.stringify({ role, content, tool_calls })
+    });
+  }
+
+  // AI dynamic page creation
+  async createAIPage(routePath: string, code?: string, title?: string): Promise<ApiResponse<{ routePath: string; file: string }>> {
+    return this.request('/ai/pages', {
+      method: 'POST',
+      body: JSON.stringify({ routePath, componentCode: code, title })
+    });
+  }
+  
+  // Product search
+  async searchProducts(params: {
+    query?: string;
+    category?: string;
+    maxPrice?: number;
+    minPrice?: number;
+    sortBy?: string;
+    sortDir?: string;
+    limit?: number;
+  }): Promise<ApiResponse<{ products: Product[] }>> {
+    const query = new URLSearchParams();
+    if (params.query) query.set('query', params.query);
+    if (params.category) query.set('category', params.category);
+    if (params.maxPrice) query.set('maxPrice', params.maxPrice.toString());
+    if (params.minPrice) query.set('minPrice', params.minPrice.toString());
+    if (params.sortBy) query.set('sortBy', params.sortBy);
+    if (params.sortDir) query.set('sortDir', params.sortDir);
+    if (params.limit) query.set('limit', params.limit.toString());
+    
+    return this.request<{ products: Product[] }>(`/products/search?${query}`);
   }
   
   // Initiate checkout

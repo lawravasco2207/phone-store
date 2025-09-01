@@ -1,0 +1,88 @@
+# Render Blueprint for phone-store
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  # Backend API service (Node/Express + Sequelize)
+  - type: web
+    name: phone-store-api
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: |
+      npm install --include=dev
+      npx sequelize-cli db:migrate || echo "Migrations failed; will rely on AUTO_SYNC at runtime"
+    startCommand: node index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Ensure devDependencies are installed during build for sequelize-cli
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: phone-store-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      # As a safety net, sync DB schema at runtime if migrations were skipped
+      - key: AUTO_SYNC
+        value: "true"
+      # Allow the backend to accept the deployed frontend origin
+      - key: FRONTEND_URL
+        fromService:
+          type: static
+          name: phone-store-frontend
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: CORS_ORIGIN
+        fromService:
+          type: static
+          name: phone-store-frontend
+          envVarKey: RENDER_EXTERNAL_URL
+      # Optional AI config — set in Render Dashboard if you use Azure OpenAI
+      - key: AZURE_OPENAI_API_KEY
+        sync: false
+      - key: AZURE_OPENAI_ENDPOINT
+        sync: false
+      # Optional email config (leave unset if not used)
+      - key: EMAIL_FROM
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+    disks:
+      - name: uploads
+        mountPath: /opt/render/project/src/backend/uploads
+        sizeGB: 1
+
+  # Frontend static site (Vite build)
+  - type: static
+    name: phone-store-frontend
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    envVars:
+      # Point frontend API calls to the backend service URL
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: phone-store-api
+          envVarKey: RENDER_EXTERNAL_URL
+    routes:
+      # SPA fallback to index.html
+      - type: rewrite
+        source: /assets/*
+        destination: /assets/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+databases:
+  - name: phone-store-db
+    plan: free

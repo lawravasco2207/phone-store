@@ -1,3 +1,21 @@
+## AI Session, Memory, and Dynamic Pages
+
+New endpoints to enable persistent AI memory and dynamic page creation:
+
+- Session & memory:
+	- GET `/api/ai/session/:sessionId/memory?limit=30`
+	- POST `/api/ai/session/:sessionId/memory` { role, content, tool_calls? }
+
+- Database access (limited):
+	- POST `/api/ai/db/query` { sql: SELECT-only, replacements? }
+	- POST `/api/ai/db/update` { table, where, values }
+
+- Frontend dynamic pages:
+	- POST `/api/ai/pages` { routePath, title?, componentCode? } -> Writes `frontend/src/ai-pages/*.tsx` and updates manifest
+	- GET `/api/ai/pages/manifest`
+
+The server sets/accepts `X-Session-Id` or `sid` cookie to track sessions. Chat endpoints now persist messages to `ChatSession` and `ChatMessage` tables.
+
 # Phone Store API (minimal)
 
 - Express + Sequelize (Postgres)

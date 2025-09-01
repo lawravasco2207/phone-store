@@ -2,10 +2,27 @@ import express from 'express';
 import { AzureOpenAI } from 'openai';
 import db from '../models/index.js';
 import { Sequelize } from 'sequelize';
+import analyzeUserRequest from '../services/chatAnalysisService.js';
+import productRecommendationService from '../services/productRecommendationService.js';
 import 'dotenv/config';
+import productSearchService from '../services/productSearchService.js';
 
 const router = express.Router();
 const sequelize = db.sequelize;
+
+// Normalize product object for chat responses
+function normalizeChatProduct(p) {
+  if (!p) return null;
+  const plain = typeof p.toJSON === 'function' ? p.toJSON() : p;
+  const images = plain.images && Array.isArray(plain.images) ? plain.images : [];
+  return {
+    id: plain.id,
+    name: plain.name,
+    price: Number(plain.price),
+    imageUrl: images[0] || '/api/placeholder/400/400',
+    description: plain.description || ''
+  };
+}
 
 // Helper function to find product info by ID in collections
 function findProductInfoById(id, ...productCollections) {
@@ -64,7 +81,8 @@ function getAzureClient() {
 // Regular chat endpoint (without tool calls)
 router.post('/', async (req, res) => {
   try {
-    const { message, userId } = req.body;
+  const { message, userId } = req.body;
+  const sessionId = req.sessionId;
 
     // fetch user + cart + last order 
     const user = userId ? await db.User.findByPk(userId, {
@@ -81,9 +99,19 @@ router.post('/', async (req, res) => {
       Last Order: ${user?.Orders?.[0]?.id || 'None'}
     `;
 
+    // Persist incoming user message into memory
+    try {
+      if (req.chatSession && message) {
+        await db.ChatMessage.create({ session_id_fk: req.chatSession.id, role: 'user', content: String(message) });
+      }
+    } catch (e) {
+      console.warn('Failed to store user chat message', e.message);
+    }
+
     // call azure openai when configured, else fallback
     const client = getAzureClient();
     let reply = '';
+    let products = [];
     if (client) {
       const completion = await client.chat.completions.create({
         messages: [
@@ -99,7 +127,55 @@ router.post('/', async (req, res) => {
       reply = `Hi${user?.name ? ' ' + user.name : ''}! I can't reach the AI service right now, but I can still help. You asked: "${message}". For product info, try browsing categories or search. If you need specs, open the product page.`;
     }
 
-    res.json({ success: true, data: { reply } });
+    // Lightweight intent/budget detection to fetch products when user asks
+    const lower = (message || '').toLowerCase();
+    // If user explicitly asks for similar/alternative options, show fallback recommendations and return early
+    const wantsAlternatives = /(similar options|alternatives|other options|anything else|more options|recommendations|show me more)/i.test(lower)
+      || /^(yes|yeah|yep|sure|ok|okay)\b.*(show|recommend|options|similar)/i.test(lower);
+    if (wantsAlternatives) {
+      try {
+        let category = '';
+        try {
+          const extracted = await analyzeUserRequest(message);
+          category = extracted?.category || '';
+        } catch {}
+        const recs = await productSearchService.getFallbackRecommendations(category || null, 6);
+        const altProducts = (recs || []).map(normalizeChatProduct).filter(Boolean);
+        const altReply = altProducts.length > 0
+          ? "Here are some similar options I think you'll like:"
+          : "I tried to find similar options but didn't see any right now.";
+        return res.json({ success: true, data: { reply: altReply, products: altProducts } });
+      } catch (e) {
+        console.error('Fetching similar options failed:', e);
+        // Fall through to normal flow
+      }
+    }
+
+    const categoryHints = ['laptop', 'phone', 'headphone', 'earbud', 'tablet', 'camera', 'watch', 'shoe', 'clothe', 'clothing', 'furniture', 'accessor'];
+    const mentionsProducts = categoryHints.some(k => lower.includes(k)) || /show|find|recommend|suggest|under\s*\$?\d+|budget|cheap|affordable/i.test(lower);
+
+    if (mentionsProducts) {
+      const budgetMatch = lower.match(/under\s*\$?(\d+)/i);
+      const budget = budgetMatch ? Number(budgetMatch[1]) : null;
+      try {
+        const found = await productSearchService.findProductsByQuery({ query: message, budget, limit: 6 });
+        products = (found || []).map(normalizeChatProduct).filter(Boolean);
+        if ((!products || products.length === 0) && !reply) {
+          reply = "I couldn’t find anything in that range, want me to show similar options?";
+        }
+      } catch (e) {
+        console.error('Inline product search failed:', e);
+      }
+    }
+
+    // Persist assistant reply
+    try {
+      if (req.chatSession && reply) {
+        await db.ChatMessage.create({ session_id_fk: req.chatSession.id, role: 'assistant', content: String(reply) });
+      }
+    } catch (e) { console.warn('Failed to store assistant reply', e.message); }
+
+    res.json({ success: true, data: { reply, products, sessionId } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Chatbot error' });
@@ -109,14 +185,16 @@ router.post('/', async (req, res) => {
 // Chat with tool calls endpoint
 router.post('/with-tools', async (req, res) => {
   try {
-    const { message, userId, context = {} } = req.body;
+  const { message, userId, context = {} } = req.body;
+  const sessionId = req.sessionId;
     
     // Extract the shopping flow state from context
     const { 
       shoppingFlowState = 'initial', 
       lastCategory = '', 
       lastSearchQuery = '',
-      selectedProductId = ''
+      selectedProductId = '',
+      productSearchResults = [] // Add field to track search results
     } = context;
 
     // Fetch user with cart, orders, and reviews
@@ -361,13 +439,29 @@ router.post('/with-tools', async (req, res) => {
         type: "function",
         function: {
           name: "searchProducts",
-          description: "Search for products in the store",
+          description: "Search for products in the store based on the user's requirements",
           parameters: {
             type: "object",
             properties: {
               query: {
                 type: "string",
-                description: "The search query"
+                description: "The search query or keywords"
+              },
+              category: {
+                type: "string",
+                description: "Product category (e.g., laptop, phone, headphones)"
+              },
+              maxPrice: {
+                type: "number",
+                description: "Maximum price/budget"
+              },
+              minPrice: {
+                type: "number",
+                description: "Minimum price"
+              },
+              purpose: {
+                type: "string",
+                description: "The intended use case (e.g., 'programming', 'gaming', 'office')"
               }
             },
             required: ["query"]
@@ -499,10 +593,40 @@ router.post('/with-tools', async (req, res) => {
       ""
     ].join('\n');
 
-    // Call Azure OpenAI when configured, else fallback
+    // If user explicitly asks for similar/alternative options, return fallback recs immediately
+    try {
+      const lowerMsg = (message || '').toLowerCase();
+      const wantsAlternatives = /(similar options|alternatives|other options|anything else|more options|recommendations|show me more)/i.test(lowerMsg)
+        || /^(yes|yeah|yep|sure|ok|okay)\b.*(show|recommend|options|similar)/i.test(lowerMsg);
+      if (wantsAlternatives) {
+        let cat = lastCategory;
+        try {
+          if (!cat) {
+            const extracted = await analyzeUserRequest(message);
+            cat = extracted?.category || '';
+          }
+        } catch {}
+
+        const recs = await productSearchService.getFallbackRecommendations(cat || null, 5);
+        const normalized = (recs || []).map(normalizeChatProduct).filter(Boolean);
+        const msgText = normalized.length > 0
+          ? (lastCategory ? `Here are some similar ${lastCategory} options:` : 'Here are some similar options:')
+          : "I couldn’t find similar options right now.";
+        return res.json({ success: true, message: msgText, toolCalls: [], products: normalized });
+      }
+    } catch (earlyAltErr) {
+      console.error('Early alternatives handling failed:', earlyAltErr);
+      // Continue with normal flow
+    }
+
+  // Store user message
+  try { if (req.chatSession && message) await db.ChatMessage.create({ session_id_fk: req.chatSession.id, role: 'user', content: String(message) }); } catch {}
+
+  // Call Azure OpenAI when configured, else fallback
     const client = getAzureClient();
-    let reply = '';
+  let reply = '';
     let toolCalls = [];
+  let productResults = [];
     
     if (client) {
       try {
@@ -513,12 +637,62 @@ router.post('/with-tools', async (req, res) => {
           ],
           tools: tools,
           tool_choice: "auto",
-          max_tokens: 500
+          max_tokens: 500,
+          stream: false
         });
         
-        const assistantMessage = completion.choices?.[0]?.message;
+  const assistantMessage = completion.choices?.[0]?.message;
         reply = assistantMessage?.content || '';
         toolCalls = assistantMessage?.tool_calls || [];
+        
+  // Process tool calls
+        if (toolCalls.length > 0) {
+          for (const toolCall of toolCalls) {
+            if (toolCall.function?.name === 'searchProducts') {
+              try {
+                // Parse the search parameters
+                const searchArgs = JSON.parse(toolCall.function.arguments);
+                console.log('Search parameters:', searchArgs);
+                
+                // If no parameters provided, analyze the user message
+                if (!searchArgs.query && !searchArgs.category && !searchArgs.maxPrice) {
+                  const extractedParams = await analyzeUserRequest(message);
+                  console.log('Extracted parameters:', extractedParams);
+                  
+                  // Merge extracted parameters with provided ones
+                  Object.keys(extractedParams).forEach(key => {
+                    if (!searchArgs[key] && extractedParams[key]) {
+                      searchArgs[key] = extractedParams[key];
+                    }
+                  });
+                }
+                
+                // Search for products with the parameters
+                const usedArgs = { hasSearch: false };
+                if (searchArgs.query || searchArgs.category || searchArgs.maxPrice || searchArgs.purpose) {
+                  usedArgs.hasSearch = true;
+                  const found = await productSearchService.findProductsByQuery({
+                    query: searchArgs.query,
+                    category: searchArgs.category,
+                    budget: searchArgs.maxPrice,
+                    minPrice: searchArgs.minPrice,
+                    purpose: searchArgs.purpose,
+                    limit: 5,
+                  });
+                  productResults = (found || []).map(normalizeChatProduct).filter(Boolean);
+                } else {
+                  // If no search parameters, get recommended products
+                  const recs = await productSearchService.getFallbackRecommendations(null, 5);
+                  productResults = (recs || []).map(normalizeChatProduct).filter(Boolean);
+                }
+                
+                console.log(`Found ${productResults.length} products matching the search`);
+              } catch (error) {
+                console.error('Error processing search products tool call:', error);
+              }
+            }
+          }
+        }
         
         // If there's a tool call but no reply content, generate a default message based on flow state
         if (toolCalls.length > 0 && !reply) {
@@ -528,8 +702,14 @@ router.post('/with-tools', async (req, res) => {
             const searchArgs = toolCalls.find(tc => tc.function.name === 'searchProducts')?.function?.arguments;
             if (searchArgs) {
               try {
-                const { query } = JSON.parse(searchArgs);
-                reply = `Let me find "${query}" for you. Here are some products that might match what you're looking for.`;
+                const params = JSON.parse(searchArgs);
+                const queryText = params.query || message;
+                
+                if (productResults.length > 0) {
+                  reply = `Here are some products that match "${queryText}". I found ${productResults.length} items that might interest you:`;
+                } else {
+                  reply = "I couldn’t find anything in that range, want me to show similar options?";
+                }
               } catch (e) {
                 reply = "Let me show you some products that might interest you.";
               }
@@ -594,10 +774,19 @@ router.post('/with-tools', async (req, res) => {
       reply = `Hi${user?.name ? ' ' + user.name : ''}! I can't reach the AI service right now, but I can still help with your shopping needs. What kind of phone are you looking for today?`;
     }
 
+    // Persist assistant message with tool calls
+    try { 
+      if (req.chatSession && reply) {
+        await db.ChatMessage.create({ session_id_fk: req.chatSession.id, role: 'assistant', content: String(reply), tool_calls: toolCalls?.length ? toolCalls : null });
+      }
+    } catch {}
+
     res.json({ 
       success: true, 
       message: reply,
-      toolCalls
+      toolCalls,
+      products: productResults,  // Include product results in the response
+      sessionId
     });
   } catch (err) {
     console.error('Chat with tools error:', err);

@@ -1,0 +1,206 @@
+import { useState, useEffect, useRef } from 'react';
+import VoiceVisualizer from '../components/VoiceVisualizer';
+
+// Ensure the SpeechRecognition global types are available
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition;
+    webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+}
+
+interface UseSpeechRecognitionProps {
+  continuousListening: boolean;
+  isSpeaking: boolean;
+  isCheckoutMode: boolean;
+  onResult: (text: string) => void;
+}
+
+interface SpeechRecognitionState {
+  isListening: boolean;
+  isSupported: boolean;
+  browserCompatWarning: string;
+  startListening: () => Promise<void>;
+  stopListening: () => void;
+  toggleListening: () => void;
+  visualizerData: number[];
+}
+
+// Hook for speech recognition functionality
+export const useSpeechRecognition = ({
+  continuousListening,
+  isSpeaking,
+  isCheckoutMode,
+  onResult
+}: UseSpeechRecognitionProps): SpeechRecognitionState => {
+  const [isListening, setIsListening] = useState(false);
+  const [isSupported, setIsSupported] = useState(true);
+  const [browserCompatWarning, setBrowserCompatWarning] = useState('');
+  const [visualizerData, setVisualizerData] = useState<number[]>([]);
+  
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const visualizerRef = useRef<VoiceVisualizer | null>(null);
+  
+  // Check for Web Speech API support
+  useEffect(() => {
+    // Detect browser
+    const userAgent = navigator.userAgent;
+    const isChrome = /Chrome/.test(userAgent) && !/Edge|Edg/.test(userAgent);
+    const isEdge = /Edge|Edg/.test(userAgent);
+    const isFirefox = /Firefox/.test(userAgent);
+    const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
+    
+    // Check for SpeechRecognition support
+    if (!('webkitSpeechRecognition' in window) && 
+        !('SpeechRecognition' in window)) {
+      console.warn('Speech recognition not supported in this browser');
+      setIsSupported(false);
+      
+      // Set browser compatibility warning
+      if (isFirefox) {
+        setBrowserCompatWarning('Firefox has limited support for voice recognition. For the best experience, try Chrome or Edge.');
+      } else if (isSafari) {
+        setBrowserCompatWarning('Safari has limited support for voice recognition. For the best experience, try Chrome or Edge.');
+      } else {
+        setBrowserCompatWarning('Your browser doesn\'t support voice recognition. For the best experience, try Chrome or Edge.');
+      }
+    } else if (!(isChrome || isEdge)) {
+      // For browsers that technically support the API but might have limited functionality
+      setBrowserCompatWarning('For the best voice experience, try using Chrome or Edge.');
+    }
+  }, []);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    if (!isSupported) return;
+    
+    // Create SpeechRecognition instance
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      
+      // Handle recognition results
+      recognition.onresult = (event) => {
+        const finalTranscript = event.results[0][0].transcript;
+        const isFinal = event.results[0].isFinal;
+        
+        // Send final result when received
+        if (isFinal) {
+          onResult(finalTranscript);
+        }
+      };
+      
+      // Handle errors
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error', event.error);
+        setIsListening(false);
+      };
+      
+      // Handle end of recognition
+      recognition.onend = () => {
+        setIsListening(false);
+        
+        // If continuous listening is enabled, restart recognition
+        // unless we're speaking or in checkout mode
+        if (continuousListening && !isSpeaking && !isCheckoutMode) {
+          setTimeout(() => {
+            startListening();
+          }, 1000);
+        }
+        
+        // Stop visualizer when recognition ends
+        if (visualizerRef.current) {
+          visualizerRef.current.stop();
+        }
+      };
+      
+      recognitionRef.current = recognition;
+    }
+    
+    // Clean up on unmount
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+      
+      if (visualizerRef.current) {
+        visualizerRef.current.stop();
+      }
+    };
+  }, [isSupported, continuousListening, isSpeaking, isCheckoutMode, onResult]);
+  
+  // Automatically disable mic during checkout
+  useEffect(() => {
+    if (isCheckoutMode && isListening) {
+      stopListening();
+    }
+  }, [isCheckoutMode, isListening]);
+
+  const startListening = async () => {
+    if (isCheckoutMode || isListening) return;
+    
+    if (recognitionRef.current) {
+      try {
+        // Initialize and start visualizer
+        if (!visualizerRef.current) {
+          visualizerRef.current = new VoiceVisualizer((data) => {
+            // Process and update visualizer data
+            setVisualizerData(data.slice(0, 20));
+          });
+        }
+        
+        if (!visualizerRef.current.isRunning()) {
+          const initialized = await visualizerRef.current.initialize();
+          if (initialized) {
+            visualizerRef.current.start();
+          }
+        }
+        
+        // Start speech recognition
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (error) {
+        console.error('Failed to start speech recognition:', error);
+        setIsListening(false);
+      }
+    }
+  };
+  
+  const stopListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+        setIsListening(false);
+        
+        // Stop visualizer
+        if (visualizerRef.current) {
+          visualizerRef.current.stop();
+          setVisualizerData([]);
+        }
+      } catch (error) {
+        console.error('Failed to stop speech recognition:', error);
+      }
+    }
+  };
+  
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  return {
+    isListening,
+    isSupported,
+    browserCompatWarning,
+    startListening,
+    stopListening,
+    toggleListening,
+    visualizerData
+  };
+};

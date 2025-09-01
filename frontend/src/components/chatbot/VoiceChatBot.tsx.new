@@ -2,16 +2,18 @@ import React, { useState, useRef, useEffect } from "react";
 import ShoppingPanel from "./components/ShoppingPanel";
 import VoiceSettingsPanel from "./components/VoiceSettingsPanel";
 import ConversationHistory from "./components/ConversationHistory";
-import type { Message, ConversationHistoryItem } from "./types/chatTypes";
-import { HISTORY_STORAGE_KEY, VOICE_SETTINGS_KEY, generateId, checkForNonEcomProducts, convertToLegacyMessageFormat } from "./utils/chatUtils.js";
-import { analyzeUserMessage, updateStateFromAssistantMessage } from "./utils/messageAnalysis.js";
-import { useSpeechRecognition } from "./hooks/useSpeechRecognition.js";
-import { useSpeechSynthesis } from "./hooks/useSpeechSynthesis.js";
-import { useShopping } from "./hooks/useShopping.js";
+import type { Message, ConversationHistoryItem, ToolCall } from "./types/chatTypes";
+import { HISTORY_STORAGE_KEY, VOICE_SETTINGS_KEY, generateId, checkForNonEcomProducts, convertToLegacyMessageFormat } from "./utils/chatUtils";
+import { analyzeUserMessage, updateStateFromAssistantMessage } from "./utils/messageAnalysis";
+import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
+import { useSpeechSynthesis } from "./hooks/useSpeechSynthesis";
+import { useShopping } from "./hooks/useShopping";
+import VoiceVisualizer, { getVisualizerData } from "./components/VoiceVisualizer";
 import { useCart } from "../CartContext.js";
 import { api } from "../../utils/api.js";
-import './chatStyles.unified.css';
-import ProductCard from './ProductCard';
+import './chatStyles.css';
+import './voiceChatStyles.css';
+import './voiceEnhancements.css';
 
 // This is the improved, shorter version of VoiceChatBot component
 const VoiceChatBot: React.FC = () => {
@@ -51,9 +53,7 @@ const VoiceChatBot: React.FC = () => {
     isCheckoutMode: shopping.isCheckoutMode,
     onResult: (text) => {
       setInput(text);
-      if (text.trim()) {
-        sendMessage(text);
-      }
+      sendMessage(text);
     }
   });
   
@@ -132,7 +132,10 @@ const VoiceChatBot: React.FC = () => {
     try {
       const historyWithConvertedMessages = conversationHistory.map(convo => ({
         ...convo,
-        messages: convertToLegacyMessageFormat(convo.messages as unknown as Message[])
+        messages: convertToLegacyMessageFormat(
+          // @ts-ignore - we're handling the conversion between message formats
+          convo.messages
+        )
       }));
       
       localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(historyWithConvertedMessages));
@@ -216,34 +219,22 @@ const VoiceChatBot: React.FC = () => {
       }
       
       // Send the message to the API
-  const response = await api.chatWithToolCalls(messageText);
+      const response = await api.chatWithToolCalls(messageText);
       
       if (!response.success) {
         throw new Error(response.error || 'Network response was not ok');
       }
       
       // Extract the response data
-  const message = (response as any).message || (response.data as any)?.reply || '';
-  let toolCalls = (response.data as any)?.toolCalls || (response as any).toolCalls || [];
-  // Normalize toolCalls (may arrive as JSON string)
-  if (typeof toolCalls === 'string') {
-    try { toolCalls = JSON.parse(toolCalls); } catch { toolCalls = []; }
-  }
-  const products = (response.data as any)?.products || (response as any).products || [];
+      const message = response.message || response.data?.reply || '';
+      const toolCalls = response.data?.toolCalls || [];
       
       // Add the assistant's response to the messages
-    const assistantMessage: Message = {
+      const assistantMessage: Message = {
         id: generateId(),
         role: 'assistant',
         content: message,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-        products: products && products.length > 0 ? products.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          price: Number(p.price),
-          description: p.description,
-      images: p.images || (p.imageUrl ? [p.imageUrl] : [])
-        })) : undefined
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined
       };
       
       setMessages(prevMessages => [...prevMessages, assistantMessage]);
@@ -302,19 +293,6 @@ const VoiceChatBot: React.FC = () => {
   const toggleChat = () => {
     setIsOpen(prev => !prev);
     if (!isOpen) {
-      // Prefer a male English voice if available and none has been chosen yet
-      if (!speech.selectedVoice && speech.availableVoices.length > 0) {
-        const maleHints = ['male','david','daniel','alex','mark','mike','john','guy','ryan','george','matthew','brian','justin','joey','arthur','fred','giles'];
-        const isMaleish = (v: SpeechSynthesisVoice) => {
-          const n = (v.name || '').toLowerCase();
-          const u = (v.voiceURI || '').toLowerCase();
-          return maleHints.some(h => n.includes(h) || u.includes(h)) || /english.*male/i.test(v.name || '');
-        };
-        const english = speech.availableVoices.filter(v => (v.lang || '').toLowerCase().startsWith('en'));
-        const englishMale = english.filter(isMaleish);
-        const pick = englishMale[0] || english[0] || speech.availableVoices[0];
-        if (pick) speech.setSelectedVoice(pick);
-      }
       // Close any open panels
       setShowSettings(false);
       setShowHistory(false);
@@ -371,7 +349,8 @@ const VoiceChatBot: React.FC = () => {
       id: msg.id,
       role: msg.sender === 'user' ? 'user' as const : 'assistant' as const,
       content: msg.text,
-      timestamp: msg.timestamp
+      timestamp: msg.timestamp,
+      toolCalls: msg.toolCalls
     }));
     
     setMessages(newFormatMessages);
@@ -380,7 +359,7 @@ const VoiceChatBot: React.FC = () => {
     
     // Reset the shopping panel
     shopping.setPanelView('products');
-    shopping.isCheckoutMode = false;
+    shopping.setIsCheckoutMode(false);
   };
   
   const deleteConversation = (id: string) => {
@@ -401,7 +380,7 @@ const VoiceChatBot: React.FC = () => {
 
   // Create voice visualization bars
   const renderVoiceVisualization = () => {
-    if (!recognition.isListening || !recognition.visualizerData || recognition.visualizerData.length === 0) {
+    if (!recognition.isListening || recognition.visualizerData.length === 0) {
       return null;
     }
     
@@ -460,32 +439,6 @@ const VoiceChatBot: React.FC = () => {
                   className={`message ${message.role === 'user' ? 'user-message' : 'assistant-message'}`}
                 >
                   <div className="message-content">{message.content}</div>
-                  {message.products && message.products.length > 0 && (
-                    <div className="chat-product-grid">
-                      {message.products.map((p) => (
-                        <ProductCard 
-                          key={p.id} 
-                          product={{
-                            id: p.id,
-                            name: p.name,
-                            price: p.price,
-                            description: p.description,
-                            images: p.images || []
-                          } as any}
-                          onAddToCart={(id) => { void cartFunctions.addToCart(id, 1); }}
-                          onViewDetails={(id) => {
-                            shopping.setSelectedProductId(String(id));
-                            shopping.setPanelView('product-detail');
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                  {message.timestamp && (
-                    <div className="message-timestamp">
-                      {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  )}
                 </div>
               ))}
               <div ref={messagesEndRef} />

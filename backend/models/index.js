@@ -11,6 +11,10 @@ if (!DATABASE_URL) {
 }
 
 function buildSequelize() {
+  // In tests, always use fast in-memory SQLite regardless of env
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    return new Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false });
+  }
   if (!DATABASE_URL) {
     return new Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false });
   }
@@ -118,6 +122,19 @@ export const VerificationToken = sequelize.define('VerificationToken', {
   expiresAt: { type: DataTypes.DATE, allowNull: false },
 });
 
+// Chat session and messages for persistent AI memory
+export const ChatSession = sequelize.define('ChatSession', {
+  session_id: { type: DataTypes.STRING, allowNull: false, unique: true },
+  status: { type: DataTypes.ENUM('active', 'archived'), allowNull: false, defaultValue: 'active' },
+  metadata: { type: DataTypes.JSONB },
+});
+
+export const ChatMessage = sequelize.define('ChatMessage', {
+  role: { type: DataTypes.ENUM('system', 'user', 'assistant', 'tool'), allowNull: false },
+  content: { type: DataTypes.TEXT, allowNull: false },
+  tool_calls: { type: DataTypes.JSONB },
+});
+
 // ===== Associations (kept compact and explicit) =====
 User.hasMany(Order, { foreignKey: 'user_id' });
 Order.belongsTo(User, { foreignKey: 'user_id' });
@@ -156,6 +173,12 @@ AuditLog.belongsTo(User, { foreignKey: 'user_id' });
 
 User.hasMany(VerificationToken, { foreignKey: 'user_id' });
 VerificationToken.belongsTo(User, { foreignKey: 'user_id' });
+
+// Chat associations
+User.hasMany(ChatSession, { foreignKey: 'user_id' });
+ChatSession.belongsTo(User, { foreignKey: 'user_id' });
+ChatSession.hasMany(ChatMessage, { foreignKey: 'session_id_fk', onDelete: 'CASCADE' });
+ChatMessage.belongsTo(ChatSession, { foreignKey: 'session_id_fk' });
 
 // ===== New models for product ingestion =====
 export const ProductVariant = sequelize.define('ProductVariant', {
@@ -251,6 +274,8 @@ const db = {
   SupportTicket,
   AuditLog,
   VerificationToken,
+  ChatSession,
+  ChatMessage,
   // New models
   ProductVariant,
   Seller,

@@ -2,6 +2,17 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // Detect correct inventory table name (Inventory vs Inventories)
+    const getInventoryTable = async () => {
+      try {
+        const [plural] = await queryInterface.sequelize.query(
+          "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = 'Inventories') as exists",
+          { type: Sequelize.QueryTypes.SELECT }
+        );
+        if (plural && (plural.exists === true || plural.exists === 't')) return 'Inventories';
+      } catch {}
+      return 'Inventory';
+    };
     // Helper function to check if records exist before inserting
     const checkExists = async (table, whereClause) => {
       try {
@@ -20,7 +31,7 @@ module.exports = {
     };
 
     // Helper function to safely insert data if it doesn't exist
-    const safeInsert = async (table, data) => {
+  const safeInsert = async (table, data) => {
       for (const item of data) {
         try {
           const exists = await checkExists(table, { id: item.id });
@@ -122,7 +133,8 @@ module.exports = {
         { id: 11, product_id: 11, stock_quantity: 22, createdAt: new Date(), updatedAt: new Date() },
         { id: 12, product_id: 12, stock_quantity: 15, createdAt: new Date(), updatedAt: new Date() },
       ];
-      await safeInsert('Inventory', inventory);
+  const inventoryTable = await getInventoryTable();
+  await safeInsert(inventoryTable, inventory);
     } catch (error) {
       console.error('Seed failed:', error);
     }

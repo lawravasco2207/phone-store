@@ -1,4 +1,5 @@
 import { Outlet, Route, Routes, Link } from 'react-router-dom'
+import AIDynamicRoutes from './components/AIDynamicRoutes'
 import ProductsListPage from './pages/ProductsList'
 import ProductDetailPage from './pages/ProductDetail'
 import ComparePage from './pages/Compare'
@@ -61,6 +62,8 @@ export default function App() {
     <Routes>
       <Route element={<RootLayout />}> 
         <Route index element={<HomePage />} />
+  {/* AI dynamic routes under /ai/* */}
+  <Route path="/ai/*" element={<AIDynamicRoutes />} />
         <Route path="/products" element={<ProductsListPage />} />
         <Route path="/products/:id" element={<ProductDetailPage />} />
         <Route path="/compare" element={<ComparePage />} />

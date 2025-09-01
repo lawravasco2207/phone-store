@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../utils/api.js';
 import type { Product, CartItem } from '../../utils/api.js';
 import { useCart } from '../CartContext.js';
-import type { PanelView, ShoppingFlowState } from './VoiceChatBot.js';
+import type { PanelView, ShoppingFlowState } from './types/chatTypes';
 
 interface ShoppingPanelProps {
   view: PanelView;

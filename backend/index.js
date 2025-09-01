@@ -9,9 +9,11 @@ import cookieParser from 'cookie-parser';
 import db from './models/index.js';
 
 // Routers
+import { sessionMiddleware } from './middleware/session.js';
 import chatRouter from './routes/chat.js';
 import authRouter from './routes/auth.js';
 import productsRouter from './routes/products.js';
+import searchRouter from './routes/search.js';
 import adminRouter from './routes/admin.js';
 import cartRouter from './routes/cart.js';
 import checkoutRouter from './routes/checkout.js';
@@ -19,6 +21,7 @@ import reviewsRouter from './routes/reviews.js';
 import supportRouter from './routes/support.js';
 import ordersRouter from './routes/orders.js';
 import integrationRouter from './routes/integration.js';
+import aiRouter from './routes/ai.js';
 
 const app = express();
 
@@ -30,6 +33,8 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+// Session must come after cookies so it can read sid
+app.use(sessionMiddleware);
 
 // Health check
 app.get('/health', (_req, res) => res.json({ success: true, data: 'ok' }));
@@ -37,6 +42,7 @@ app.get('/health', (_req, res) => res.json({ success: true, data: 'ok' }));
 // Mount feature routers under /api to avoid clashes with frontend
 app.use('/api/chat', chatRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/products/search', searchRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/cart', cartRouter);
@@ -45,6 +51,7 @@ app.use('/api/reviews', reviewsRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/integration', integrationRouter);
+app.use('/api/ai', aiRouter);
 
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));
