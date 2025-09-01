@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useCart } from '../components/CartContext'
 import { useFavorites } from '../components/FavoritesContext'
 import { useAuth } from '../components/AuthContext'
-import { api, type Product, type Review } from '../utils/api'
+import { api, API_BASE_URL, type Product, type Review } from '../utils/api'
 import { formatPrice } from '../utils/format'
 import { useToast } from '../components/AlertToast'
 import Viewer360 from '../components/Viewer360'
@@ -153,7 +153,7 @@ export default function ProductDetail() {
 
   const images = product.images && product.images.length > 0 
     ? product.images 
-    : ['/api/placeholder/400/400'] // Fallback image
+    : [`${API_BASE_URL}/placeholder/400/400`] // Fallback image
 
   return (
     <section className="py-8">
@@ -174,7 +174,7 @@ export default function ProductDetail() {
                 alt={product.name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  e.currentTarget.src = '/api/placeholder/400/400'
+                  e.currentTarget.src = `${API_BASE_URL}/placeholder/400/400`
                 }}
               />
             </div>
@@ -194,7 +194,7 @@ export default function ProductDetail() {
                       alt={`${product.name} ${index + 1}`}
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        e.currentTarget.src = '/api/placeholder/64/64'
+                        e.currentTarget.src = `${API_BASE_URL}/placeholder/64/64`
                       }}
                     />
                   </button>

@@ -2,6 +2,7 @@ import { useCart } from '../components/CartContext'
 import { formatPrice } from '../utils/format'
 import { Link } from 'react-router-dom'
 import { type CartItem } from '../utils/api'
+import { API_BASE_URL } from '../utils/api'
 
 export default function Cart() {
   const { 
@@ -123,7 +124,7 @@ function CartItem({ item, onUpdateQuantity, onRemove }: CartItemProps) {
   const { Product: product } = item
   const imageUrl = product.images && product.images.length > 0 
     ? product.images[0] 
-    : '/api/placeholder/200/200'
+    : `${API_BASE_URL}/placeholder/200/200`
 
   const handleQuantityChange = async (newQuantity: number) => {
     if (newQuantity < 1) return
@@ -151,7 +152,7 @@ function CartItem({ item, onUpdateQuantity, onRemove }: CartItemProps) {
           alt={product.name}
           className="w-20 h-20 object-cover rounded-lg"
           onError={(e) => {
-            e.currentTarget.src = '/api/placeholder/200/200'
+            e.currentTarget.src = `${API_BASE_URL}/placeholder/200/200`
           }}
         />
       </div>
