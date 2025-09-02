@@ -17,11 +17,13 @@ import { FavoritesProvider } from './components/FavoritesContext'
 import { AuthProvider } from './components/AuthContext'
 import VoiceChatBot from './components/chatbot/VoiceChatBot'
 import { CategoryProvider } from './components/CategoryContext'
+import { AuthPromptProvider } from './components/AuthPromptContext'
 
 function RootLayout() {
   return (
     <ToastProvider>
       <AuthProvider>
+        <AuthPromptProvider>
         <CartProvider>
           <FavoritesProvider>
             <CategoryProvider>
@@ -39,6 +41,7 @@ function RootLayout() {
             </CategoryProvider>
           </FavoritesProvider>
         </CartProvider>
+        </AuthPromptProvider>
       </AuthProvider>
     </ToastProvider>
   )
