@@ -1,13 +1,10 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { api, type Product, type CartItem } from '../utils/api'
 import { useAuth } from './AuthContext'
+import { useAuthPrompt } from './AuthPromptContext'
 
 // Type for guest cart items stored in localStorage
-type GuestCartItem = {
-  productId: number;
-  quantity: number;
-  product: Product;
-}
+// Guest cart mode has been removed; cart actions require authentication.
 
 type CartContextValue = {
   items: CartItem[]
@@ -24,131 +21,21 @@ type CartContextValue = {
   getCartItemsCount: () => number
 }
 
-const GUEST_CART_KEY = 'phone_store_guest_cart';
+// No local guest cart storage anymore
 
 const CartContext = createContext<CartContextValue | null>(null)
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
+  const { requireAuth } = useAuthPrompt()
   const [items, setItems] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(false)
   
-  // Load the guest cart from localStorage
-  const loadGuestCart = useCallback(() => {
-    try {
-      const storedCart = localStorage.getItem(GUEST_CART_KEY);
-      if (storedCart) {
-        const guestCartItems = JSON.parse(storedCart) as GuestCartItem[];
-        
-        // Convert guest cart items to CartItem format
-        const cartItems: CartItem[] = guestCartItems.map(item => ({
-          id: item.productId, // Use productId as cart item id for guest cart
-          quantity: item.quantity,
-          Product: item.product
-        }));
-        
-        setItems(cartItems);
-      }
-    } catch (error) {
-      console.error('Failed to load guest cart:', error);
-      // Clear corrupted cart data
-      localStorage.removeItem(GUEST_CART_KEY);
-      setItems([]);
-    }
-  }, []);
-  
-  // Save the guest cart to localStorage
-  const saveGuestCart = useCallback((cartItems: CartItem[]) => {
-    try {
-      // Convert CartItem[] to GuestCartItem[] format
-      const guestCartItems: GuestCartItem[] = cartItems.map(item => {
-        // Safely convert product ID to number
-        let productId: number;
-        if (typeof item.Product.id === 'number') {
-          productId = item.Product.id;
-        } else if (typeof item.Product.id === 'string') {
-          productId = parseInt(item.Product.id);
-          if (isNaN(productId)) productId = 0;
-        } else {
-          productId = 0;
-        }
-        
-        return {
-          productId,
-          quantity: item.quantity,
-          product: item.Product
-        };
-      });
-      
-      localStorage.setItem(GUEST_CART_KEY, JSON.stringify(guestCartItems));
-    } catch (error) {
-      console.error('Failed to save guest cart:', error);
-    }
-  }, []);
-
-  // Helper function to update guest cart
-  const updateGuestCart = useCallback((productId: string | number, quantity: number) => {
-    const idStr = String(productId);
-    
-    if (quantity <= 0) {
-      // Remove item from cart
-      const updatedItems = items.filter(item => String(item.Product.id) !== idStr);
-      setItems(updatedItems);
-      saveGuestCart(updatedItems);
-    } else {
-      // Update quantity
-      const updatedItems = items.map(item => {
-        if (String(item.Product.id) === idStr) {
-          return { ...item, quantity };
-        }
-        return item;
-      });
-      setItems(updatedItems);
-      saveGuestCart(updatedItems);
-    }
-  }, [items, saveGuestCart]);
-  
-  // Helper to add product to guest cart
-  const addProductToGuestCart = useCallback((product: Product, quantity: number) => {
-    const productIdStr = String(product.id);
-    const existingItemIndex = items.findIndex(item => 
-      String(item.Product.id) === productIdStr
-    );
-    
-    if (existingItemIndex >= 0) {
-      // Product already in cart, update quantity
-      const updatedItems = [...items];
-      updatedItems[existingItemIndex].quantity += quantity;
-      setItems(updatedItems);
-      saveGuestCart(updatedItems);
-    } else {
-      // Product not in cart, add it
-      let numericId = 0;
-      if (typeof product.id === 'number') {
-        numericId = product.id;
-      } else if (typeof product.id === 'string') {
-        numericId = parseInt(product.id);
-        if (isNaN(numericId)) numericId = 0;
-      }
-      
-      const newItem: CartItem = {
-        id: numericId,
-        quantity,
-        Product: product
-      };
-      const updatedItems = [...items, newItem];
-      setItems(updatedItems);
-      saveGuestCart(updatedItems);
-    }
-    return true;
-  }, [items, saveGuestCart]);
+  // Guest cart helpers removed
 
   // Sync cart with backend for logged-in users
   const syncWithBackend = useCallback(async () => {
-    if (!user) {
-      loadGuestCart();
-      return;
-    }
+  if (!user) return;
     
     setLoading(true);
     try {
@@ -161,187 +48,104 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [user, loadGuestCart]);
+  }, [user]);
 
   // Remove item from cart
   const removeFromCart = useCallback(async (itemId: number): Promise<boolean> => {
     try {
-      if (user) {
-        // User is logged in, use backend cart
-        const response = await api.removeFromCart(itemId);
-        if (response.success) {
-          // Immediately update local state
-          setItems(prevItems => prevItems.filter(item => item.id !== itemId));
-          return true;
-        }
-        return false;
-      } else {
-        // User is not logged in, remove from guest cart
-        const itemToRemove = items.find(item => item.id === itemId);
-        if (itemToRemove) {
-          updateGuestCart(itemToRemove.Product.id, 0);
-          return true;
-        }
-        return false;
+      if (!user) { requireAuth(); return false; }
+      const response = await api.removeFromCart(itemId);
+      if (response.success) {
+        setItems(prevItems => prevItems.filter(item => item.id !== itemId));
+        return true;
       }
+      return false;
     } catch (error) {
       console.error('Failed to remove from cart:', error);
       return false;
     }
-  }, [user, items, updateGuestCart]);
+  }, [user, requireAuth]);
 
   // Update quantity of item in cart
   const updateQuantity = useCallback(async (itemId: number, quantity: number): Promise<boolean> => {
     try {
-      if (user) {
-        // User is logged in, use backend cart
-        const response = await api.updateCartItem(itemId, quantity);
-        if (response.success) {
-          // If response has item data, use it to update state
-          if (response.data?.item) {
-            setItems(prevItems => 
-              prevItems.map(item => 
-                item.id === itemId ? response.data!.item! : item
-              )
-            );
-          } else {
-            // Fallback to manual update
-            setItems(prevItems => 
-              prevItems.map(item => 
-                item.id === itemId ? { ...item, quantity } : item
-              )
-            );
-          }
-          return true;
+      if (!user) { requireAuth(); return false; }
+      const response = await api.updateCartItem(itemId, quantity);
+      if (response.success) {
+        const raw: any = (response as any).data;
+        const updatedItem: any = raw?.item ?? raw;
+        if (updatedItem && typeof updatedItem === 'object' && 'id' in updatedItem) {
+          setItems(prevItems => prevItems.map(item => item.id === itemId ? updatedItem : item));
+        } else {
+          setItems(prevItems => prevItems.map(item => item.id === itemId ? { ...item, quantity } : item));
         }
-        return false;
-      } else {
-        // User is not logged in, update guest cart
-        const itemToUpdate = items.find(item => item.id === itemId);
-        if (itemToUpdate) {
-          updateGuestCart(itemToUpdate.Product.id, quantity);
-          return true;
-        }
-        return false;
+        return true;
       }
+      return false;
     } catch (error) {
       console.error('Failed to update cart quantity:', error);
       return false;
     }
-  }, [user, items, updateGuestCart]);
+  }, [user, requireAuth]);
   
   // API-style add to cart (returns promise)
   const addToCart = useCallback(async (productId: number, quantity: number): Promise<boolean> => {
     try {
-      if (user) {
-        // User is logged in, use backend cart
-        const response = await api.addToCart(productId, quantity);
-        if (response.success) {
-          // If response has data, update the local state immediately
-          if (response.data?.item) {
-            // Add new item or update existing one
-            const newItem = response.data.item;
-            setItems(prevItems => {
-              const existingItemIndex = prevItems.findIndex(item => 
-                item.id === newItem.id
-              );
-              
-              if (existingItemIndex >= 0) {
-                // Update existing item
-                const updatedItems = [...prevItems];
-                updatedItems[existingItemIndex] = newItem;
-                return updatedItems;
-              } else {
-                // Add new item
-                return [...prevItems, newItem];
-              }
-            });
-          } else {
-            // Fallback to getting the entire cart
-            syncWithBackend();
-          }
-          return true;
+      if (!user) { requireAuth(); return false; }
+      const response = await api.addToCart(productId, quantity);
+      if (response.success) {
+        const raw: any = (response as any).data;
+        const newItem: any = raw?.item ?? raw;
+        if (newItem && typeof newItem === 'object' && 'id' in newItem) {
+          setItems(prevItems => {
+            const ix = prevItems.findIndex(i => i.id === newItem.id);
+            if (ix >= 0) { const copy = [...prevItems]; copy[ix] = newItem; return copy; }
+            return [...prevItems, newItem];
+          });
+        } else {
+          await syncWithBackend();
         }
-        return false;
-      } else {
-        // User is not logged in, get product details and add to guest cart
-        const productResponse = await api.getProduct(productId);
-        if (productResponse.success && productResponse.data) {
-          const product = productResponse.data.product;
-          return addProductToGuestCart(product, quantity);
-        }
-        return false;
+        return true;
       }
+      return false;
     } catch (error) {
       console.error('Failed to add to cart:', error);
       return false;
     }
-  }, [user, syncWithBackend, addProductToGuestCart]);
+  }, [user, requireAuth, syncWithBackend]);
 
   // Add to cart (simple version for use in components)
   const add = useCallback((product: Product, qty = 1) => {
     if (!product) return;
     
-    if (user) {
-      // Call the function implementation directly
-      addToCart(
-        typeof product.id === 'number' 
-          ? product.id 
-          : typeof product.id === 'string'
-            ? parseInt(product.id)
-            : 0, 
-        qty
-      );
-    } else {
-      addProductToGuestCart(product, qty);
-    }
-  }, [user, addToCart, addProductToGuestCart]);
+    const idNum = typeof product.id === 'number' ? product.id : typeof product.id === 'string' ? parseInt(product.id) : 0;
+    if (!user) { requireAuth(() => addToCart(idNum, qty)); return; }
+    addToCart(idNum, qty);
+  }, [user, requireAuth, addToCart]);
 
   // Set quantity of item in cart
   const setQty = useCallback((id: string, qty: number) => {
-    if (user) {
-      // Find the cart item with the matching ID
-      const backendItem = items.find(item => {
-        // Check both item.id and item.Product.id for flexibility
-        return String(item.id) === id || String(item.Product.id) === id;
-      });
-      
-      if (backendItem) {
-        if (qty <= 0) {
-          removeFromCart(backendItem.id);
-        } else {
-          updateQuantity(backendItem.id, qty);
-        }
-      }
-    } else {
-      // Guest user
-      updateGuestCart(id, qty);
-    }
-  }, [user, items, removeFromCart, updateQuantity, updateGuestCart]);
+    if (!user) { requireAuth(); return; }
+    const backendItem = items.find(item => String(item.id) === id || String(item.Product.id) === id);
+    if (!backendItem) return;
+    if (qty <= 0) removeFromCart(backendItem.id); else updateQuantity(backendItem.id, qty);
+  }, [user, items, removeFromCart, updateQuantity, requireAuth]);
 
   // Remove item from cart (shorthand for setQty with 0)
   const remove = useCallback((id: string) => setQty(id, 0), [setQty]);
   
   // Clear entire cart
   const clear = useCallback(async () => {
-    if (user) {
-      // User is logged in, clear backend cart
-      try {
-        if (items && items.length > 0) {
-          await Promise.all(
-            items.map((item) => api.removeFromCart(item.id))
-          );
-        }
-        await syncWithBackend();
-      } catch (error) {
-        console.error('Failed to clear backend cart:', error);
+    if (!user) { requireAuth(); return; }
+    try {
+      if (items && items.length > 0) {
+        await Promise.all(items.map((item) => api.removeFromCart(item.id)));
       }
-    } else {
-      // User is not logged in, clear guest cart
-      setItems([]);
-      localStorage.removeItem(GUEST_CART_KEY);
+      await syncWithBackend();
+    } catch (error) {
+      console.error('Failed to clear backend cart:', error);
     }
-  }, [user, items, syncWithBackend]);
+  }, [user, items, syncWithBackend, requireAuth]);
 
   // Get total price of cart
   const getCartTotal = useCallback((): number => {
@@ -361,14 +165,56 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Load initial cart when component mounts or user changes
   useEffect(() => {
-    if (user) {
-      // User is logged in, get cart from backend
-      syncWithBackend();
-    } else {
-      // User is not logged in, load guest cart from localStorage
-      loadGuestCart();
+    if (user) syncWithBackend();
+  }, [user, syncWithBackend]);
+
+  // Real-time updates via SSE
+  const evtSourceRef = useRef<EventSource | null>(null);
+  useEffect(() => {
+    // Only subscribe when logged in
+    if (!user) {
+      if (evtSourceRef.current) { evtSourceRef.current.close(); evtSourceRef.current = null; }
+      return;
     }
-  }, [user, syncWithBackend, loadGuestCart]);
+
+    // Build base URL respecting proxy/dev configuration
+    const base = (import.meta.env.VITE_API_BASE_URL as string) || '/api';
+    // Prefer absolute URL when not proxied
+    const url = base.startsWith('http') ? `${base}/cart/stream` : `/api/cart/stream`;
+
+    // Use withCredentials by passing full URL and letting Vite proxy handle cookies
+    const es = new EventSource(url, { withCredentials: true } as any);
+    evtSourceRef.current = es;
+
+    const onCart = (ev: MessageEvent) => {
+      try {
+        const payload = JSON.parse(ev.data || '{}');
+        // If change originated from this same session, skip extra fetch; our local state already updated optimistically
+        const sidMatch = document.cookie.match(/(?:^|; )sid=([^;]+)/);
+        const sid = sidMatch ? decodeURIComponent(sidMatch[1]) : null;
+        if (payload?.sessionId && sid && payload.sessionId === sid) return;
+      } catch {}
+      // Pull latest items
+      syncWithBackend();
+    };
+
+    es.addEventListener('cart', onCart as any);
+    // Optional: resync on reconnect hello
+    const onHello = () => syncWithBackend();
+    es.addEventListener('hello', onHello as any);
+
+    es.onerror = () => {
+      // Browser will auto-retry EventSource; no action needed beyond optional logging
+      // console.warn('SSE error, will retry...');
+    };
+
+    return () => {
+      es.removeEventListener('cart', onCart as any);
+      es.removeEventListener('hello', onHello as any);
+      es.close();
+      evtSourceRef.current = null;
+    };
+  }, [user, syncWithBackend]);
 
   // Create value object with all cart functions
   const value = useMemo<CartContextValue>(() => ({ 

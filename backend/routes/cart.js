@@ -1,6 +1,7 @@
 // Cart endpoints (authenticated-only)
 import express from 'express';
 import db from '../models/index.js';
+import jwt from 'jsonwebtoken';
 import { authRequired } from '../middleware/auth.js';
 import { getCart, addToCart, updateCartItem, removeCartItem } from '../services/cartService.js';
 import { subscribeToCart, emitCartChanged } from '../utils/sse.js';
@@ -13,7 +14,32 @@ router.use(authRequired);
 // GET /api/cart/stream - Server-Sent Events subscription for real-time cart changes
 router.get('/stream', async (req, res) => {
   try {
-    // Reuse authRequired so req.user is available
+    // For SSE connections that can't send Authorization header, check for token in query
+    // This is needed for cross-origin EventSource connections
+    if (!req.user && req.query.auth_token) {
+      try {
+        const payload = jwt.verify(req.query.auth_token, process.env.JWT_SECRET || 'dev_secret');
+        const user = await db.User.findByPk(payload.id);
+        if (user) {
+          req.user = { id: user.id, role: user.role };
+        }
+      } catch (e) {
+        console.error('SSE auth token error:', e);
+      }
+    }
+    
+    // Check if authenticated after the query param check
+    if (!req.user) {
+      return res.status(401).end('Unauthorized');
+    }
+    
+    // Set appropriate CORS headers for SSE
+    if (req.headers.origin) {
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    
+    // Use req.user from authRequired middleware or token check above
     subscribeToCart(req.user.id, res);
   } catch (e) {
     console.error('SSE subscribe error:', e);

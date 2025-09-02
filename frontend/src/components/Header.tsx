@@ -3,13 +3,13 @@ import { useState, useEffect } from 'react'
 import { useCart } from './CartContext'
 import { useFavorites } from './FavoritesContext'
 import { useAuth } from './AuthContext'
-import { AuthModal } from './AuthModal'
+import { useAuthPrompt } from './AuthPromptContext'
 
 // Header with brand, nav, and cart badge; extracted for reuse and clarity
 export default function Header() {
   const { items } = useCart()
   const { user, logout, isAdmin } = useAuth()
-  const [showAuthModal, setShowAuthModal] = useState(false)
+  const { openAuth } = useAuthPrompt()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const count = items && items.length > 0 ? items.reduce((sum, i) => sum + i.quantity, 0) : 0
   const fav = useFavorites()
@@ -145,7 +145,7 @@ export default function Header() {
                 </div>
               ) : (
                 <button
-                  onClick={() => setShowAuthModal(true)}
+                  onClick={openAuth}
                   className="text-sm bg-[var(--brand-primary)] text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors focus-ring"
                 >
                   Sign In
@@ -279,10 +279,7 @@ export default function Header() {
                   </div>
                 ) : (
                   <button
-                    onClick={() => {
-                      setShowAuthModal(true)
-                      setIsMenuOpen(false)
-                    }}
+                    onClick={() => { openAuth(); setIsMenuOpen(false) }}
                     className="w-full py-3 text-center bg-[var(--brand-primary)] text-white rounded-md hover:bg-[var(--brand-primary-700)] transition-colors focus-ring"
                   >
                     Sign In
@@ -294,7 +291,6 @@ export default function Header() {
         </div>
       </header>
 
-      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </>
   )
 }

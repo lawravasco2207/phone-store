@@ -266,8 +266,8 @@ class ApiClient {
 
   // Cart endpoints
   async getCart(): Promise<ApiResponse<{ items: CartItem[] }>> {
-    // Don't cache cart since it changes frequently
-    return this.request<{ items: CartItem[] }>('/cart');
+  // Cache under a predictable key so mutations can invalidate via clearCache('cart')
+  return this.request<{ items: CartItem[] }>('/cart', undefined, 'cart');
   }
 
   async addToCart(productId: number, quantity: number = 1): Promise<ApiResponse<{ item?: CartItem }>> {
@@ -276,8 +276,9 @@ class ApiClient {
       body: JSON.stringify({ productId, quantity }),
     });
     
-    // Clear cart cache after modification
-    this.clearCache('cart');
+  // Clear cart cache after modification
+  this.clearCache('cart'); // prefix
+  this.clearCache('GET:/cart'); // exact key safety
     return response;
   }
 
@@ -287,8 +288,9 @@ class ApiClient {
       body: JSON.stringify({ quantity }),
     });
     
-    // Clear cart cache after modification
-    this.clearCache('cart');
+  // Clear cart cache after modification
+  this.clearCache('cart');
+  this.clearCache('GET:/cart');
     return response;
   }
 
@@ -296,7 +298,8 @@ class ApiClient {
     const response = await this.request(`/cart/${itemId}`, { method: 'DELETE' });
     
     // Clear cart cache after modification
-    this.clearCache('cart');
+  this.clearCache('cart');
+  this.clearCache('GET:/cart');
     return response;
   }
 

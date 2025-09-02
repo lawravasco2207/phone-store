@@ -11,8 +11,19 @@ const router = express.Router();
 
 function issueJwt(res, user) {
   const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET || 'dev_secret', { expiresIn: '7d' });
-  // HttpOnly cookie; frontend reads minimal user from response
-  res.cookie('token', token, { httpOnly: true, sameSite: 'lax', secure: !!process.env.COOKIE_SECURE });
+  
+  // Set proper cookie settings for cross-origin access
+  const isProd = process.env.NODE_ENV === 'production';
+  res.cookie('token', token, { 
+    httpOnly: true, 
+    sameSite: isProd ? 'none' : 'lax', 
+    secure: isProd || !!process.env.COOKIE_SECURE,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+    path: '/'
+  });
+  
+  // Also return token in the response for the frontend to store and use as needed
+  return token;
 }
 
 // POST /register
@@ -57,9 +68,15 @@ router.post('/login', async (req, res) => {
     if (!ok) return res.status(401).json({ success: false, error: 'Invalid credentials' });
     if (!user.emailVerified) return res.status(403).json({ success: false, error: 'Please verify your email' });
     user.lastLogin = new Date(); await user.save();
-    issueJwt(res, user);
+    const token = issueJwt(res, user);
     await writeAudit(user.id, 'login', 'Users', user.id);
-    return res.json({ success: true, data: { user: { id: user.id, name: user.name, role: user.role } } });
+    return res.json({ 
+      success: true, 
+      data: { 
+        user: { id: user.id, name: user.name, role: user.role },
+        token // Include token in response for frontend
+      } 
+    });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ success: false, error: 'Login failed' });
