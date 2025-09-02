@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../components/AuthContext'
 import { api, type Product } from '../utils/api'
+import { API_BASE_URL } from '../utils/api'
 import { formatPrice } from '../utils/format'
 import { useToast } from '../components/AlertToast'
 
@@ -57,7 +58,7 @@ export default function AdminDashboard() {
     const fetchJobs = async () => {
       setLoadingJobs(true)
       try {
-        const response = await fetch('/api/admin/ingestion-jobs', {
+  const response = await fetch(`${API_BASE_URL}/admin/ingestion-jobs`, {
           credentials: 'include'
         })
         const data = await response.json()
@@ -99,7 +100,7 @@ export default function AdminDashboard() {
       formData.append('csv', csvFile)
       formData.append('hasHeader', 'true')
       
-      const response = await fetch('/api/admin/products/csv-upload', {
+  const response = await fetch(`${API_BASE_URL}/admin/products/csv-upload`, {
         method: 'POST',
         body: formData,
         credentials: 'include'

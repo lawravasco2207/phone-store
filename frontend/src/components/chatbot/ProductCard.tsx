@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Product } from '../../utils/api';
+import { API_BASE_URL } from '../../utils/api';
 
 interface ProductCardProps {
   product: Product;
@@ -17,7 +18,7 @@ const ProductCard: React.FC<ProductCardProps> = ({ product, onAddToCart, onViewD
   // Get the primary image or use a placeholder
   const primaryImage = product.images && product.images.length > 0 
     ? product.images[0] 
-    : '/api/placeholder/400/400';
+    : `${API_BASE_URL}/placeholder/400/400`;
 
   return (
     <div className="product-card">

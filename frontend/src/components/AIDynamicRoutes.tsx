@@ -1,4 +1,5 @@
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import { API_BASE_URL } from '../utils/api';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 
 // Import all ai-pages for Vite HMR; each file must default export a React component
@@ -18,7 +19,7 @@ export default function AIDynamicRoutes() {
         // Try backend API first for CORS-safe manifest
         let data: any = [];
         try {
-          const apiRes = await fetch('/api/ai/pages/manifest', { cache: 'no-store', credentials: 'include' });
+          const apiRes = await fetch(`${API_BASE_URL}/ai/pages/manifest`, { cache: 'no-store', credentials: 'include' });
           if (apiRes.ok) {
             const apiData = await apiRes.json();
             data = apiData?.data ?? [];

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { api, type User } from '../utils/api';
+import { api, API_BASE_URL, type User } from '../utils/api';
 
 type AuthContextValue = {
   user: User | null;
@@ -21,7 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const checkAuth = async () => {
       try {
         // Simple auth check - if we have a JWT cookie, try to make an authenticated request
-        const response = await fetch('/api/auth/me', { 
+  const response = await fetch(`${API_BASE_URL}/auth/me`, { 
           credentials: 'include' 
         });
         if (response.ok) {
