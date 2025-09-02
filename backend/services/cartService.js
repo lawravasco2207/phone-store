@@ -10,7 +10,7 @@ import db from '../models/index.js';
 export async function addToCart(userId, productId, quantity = 1) {
     // Ensure the product exists and has inventory
     const product = await db.Product.findByPk(productId, {
-        include: [{ model: db.Inventory, as: 'Inventory' }]
+        include: [db.Inventory]
     });
     
     if (!product) {
@@ -36,13 +36,27 @@ export async function addToCart(userId, productId, quantity = 1) {
             throw new Error('Insufficient inventory');
         }
         
-        return existing.update({ quantity: newQuantity });
+        await existing.update({ quantity: newQuantity });
+        return db.CartItem.findOne({
+            where: { id: existing.id },
+            include: [{
+                model: db.Product,
+                include: [db.Inventory, db.MediaAsset]
+            }]
+        });
     } else {
         // Create new cart item
-        return db.CartItem.create({ 
+        const created = await db.CartItem.create({ 
             user_id: userId, 
             product_id: productId, 
             quantity: Number(quantity) 
+        });
+        return db.CartItem.findOne({
+            where: { id: created.id },
+            include: [{
+                model: db.Product,
+                include: [db.Inventory, db.MediaAsset]
+            }]
         });
     }
 }
@@ -57,10 +71,7 @@ export async function getCart(userId) {
         where: { user_id: userId },
         include: [{
             model: db.Product,
-            include: [
-                { model: db.Inventory, as: 'Inventory' },
-                { model: db.ProductImage, as: 'ProductImages' }
-            ]
+            include: [db.Inventory, db.MediaAsset]
         }]
     });
 }
@@ -77,7 +88,7 @@ export async function updateCartItem(itemId, userId, quantity) {
         where: { id: itemId, user_id: userId },
         include: [{
             model: db.Product,
-            include: [{ model: db.Inventory, as: 'Inventory' }]
+            include: [db.Inventory]
         }]
     });
     
