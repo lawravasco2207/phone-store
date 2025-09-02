@@ -165,7 +165,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Load initial cart when component mounts or user changes
   useEffect(() => {
-    if (user) syncWithBackend();
+    if (user) {
+      console.log('User authenticated, syncing cart with backend');
+      syncWithBackend();
+    }
   }, [user, syncWithBackend]);
 
   // Real-time updates via SSE
@@ -182,8 +185,19 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     // Prefer absolute URL when not proxied
     const url = base.startsWith('http') ? `${base}/cart/stream` : `/api/cart/stream`;
 
+    // For cross-origin requests to production, construct URL with auth token to ensure authentication
+    // This works around EventSource's limited support for custom headers
+    let finalUrl = url;
+    if (base.startsWith('http')) {
+      const tokenMatch = document.cookie.match(/(?:^|; )token=([^;]+)/);
+      if (tokenMatch) {
+        const separator = url.includes('?') ? '&' : '?';
+        finalUrl = `${url}${separator}auth_token=${encodeURIComponent(tokenMatch[1])}`;
+      }
+    }
+
     // Use withCredentials by passing full URL and letting Vite proxy handle cookies
-    const es = new EventSource(url, { withCredentials: true } as any);
+    const es = new EventSource(finalUrl, { withCredentials: true } as any);
     evtSourceRef.current = es;
 
     const onCart = (ev: MessageEvent) => {

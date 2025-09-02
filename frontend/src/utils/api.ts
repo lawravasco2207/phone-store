@@ -86,6 +86,13 @@ async function fetchWithErrorHandling<T>(url: string, options: RequestInit = {})
     // Attach session header if available
     const sid = getSessionId();
     (options.headers as Record<string, string>)['X-Session-Id'] = sid || '';
+    
+    // For cross-origin requests to production, also send token in Authorization header
+    // This ensures auth works even if cookies aren't sent due to browser restrictions
+    const tokenMatch = document.cookie.match(/(?:^|; )token=([^;]+)/);
+    if (tokenMatch) {
+      (options.headers as Record<string, string>)['Authorization'] = `Bearer ${decodeURIComponent(tokenMatch[1])}`;
+    }
 
     // Make the request
     const response = await fetch(url, options);
@@ -204,8 +211,8 @@ class ApiClient {
     });
   }
 
-  async login(email: string, password: string): Promise<ApiResponse<{ user: User }>> {
-    return this.request<{ user: User }>('/auth/login', {
+  async login(email: string, password: string): Promise<ApiResponse<{ user: User; token?: string }>> {
+    return this.request<{ user: User; token?: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
