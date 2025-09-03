@@ -85,7 +85,7 @@ router.patch('/products/:id', async (req, res) => {
     const p = await db.Product.findByPk(req.params.id);
     if (!p) return res.status(404).json({ success: false, error: 'Not found' });
     
-    const { name, description, price, images, brand, attributes, variants } = req.body || {};
+    const { name, description, price, images, brand, attributes, variants, featured } = req.body || {};
     if (images && !Array.isArray(images)) return res.status(400).json({ success: false, error: 'images must be array' });
     
     // Update basic product info
@@ -95,7 +95,8 @@ router.patch('/products/:id', async (req, res) => {
       images: images ? images.slice(0,10) : undefined, 
       description,
       brand,
-      attributes
+      attributes,
+      featured: featured !== undefined ? !!featured : p.featured
     });
     
     // Handle variants if provided
@@ -171,6 +172,52 @@ router.patch('/products/:id', async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ success: false, error: 'Update failed' });
+  }
+});
+
+// PATCH /api/admin/products/:id/featured - Toggle featured status
+router.patch('/products/:id/featured', async (req, res) => {
+  try {
+    // Check if featured column exists
+    let hasFeaturedColumn = false;
+    try {
+      const [columnCheck] = await db.sequelize.query(
+        "SELECT EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'Products' AND column_name = 'featured')"
+      );
+      hasFeaturedColumn = columnCheck[0].exists;
+      
+      if (!hasFeaturedColumn) {
+        // Add featured column if it doesn't exist
+        await db.sequelize.query(
+          "ALTER TABLE \"Products\" ADD COLUMN featured BOOLEAN NOT NULL DEFAULT false"
+        );
+        hasFeaturedColumn = true;
+      }
+    } catch (err) {
+      console.error("Column check failed:", err.message);
+      return res.status(500).json({ success: false, error: 'Failed to check featured column' });
+    }
+    
+    const p = await db.Product.findByPk(req.params.id);
+    if (!p) return res.status(404).json({ success: false, error: 'Product not found' });
+    
+    const featured = req.body.featured !== undefined ? !!req.body.featured : !p.featured;
+    
+    // Update featured status
+    await p.update({ featured });
+    
+    await writeAudit(req.user.id, 'update', 'Products', p.id, { featured });
+    
+    return res.json({ 
+      success: true, 
+      data: { 
+        id: p.id,
+        featured: featured 
+      } 
+    });
+  } catch (e) {
+    console.error('Featured status update error:', e);
+    return res.status(500).json({ success: false, error: 'Failed to update featured status' });
   }
 });
 

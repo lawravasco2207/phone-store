@@ -6,18 +6,24 @@
   "main": "index.js",
   "scripts": {
     "dev": "node index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "init-categories": "node scripts/init-categories.js",
+    "set-featured": "node scripts/set-featured-products.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@azure/identity": "latest",
+    "@paypal/checkout-server-sdk": "^1.0.3",
+    "@types/uuid": "^10.0.0",
+    "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "csv-parse": "^6.1.0",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^7.1.5",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
@@ -26,7 +32,9 @@
     "openai": "^5.16.0",
     "pg": "^8.16.3",
     "pg-hstore": "^2.3.4",
-    "sequelize": "^6.37.7"
+    "sequelize": "^6.37.7",
+    "socket.io": "^4.7.4",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "sequelize-cli": "^6.6.3",

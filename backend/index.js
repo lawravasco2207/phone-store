@@ -10,9 +10,9 @@ import db from './models/index.js';
 
 // Routers
 import { sessionMiddleware } from './middleware/session.js';
-import chatRouter from './routes/chat.js';
 import authRouter from './routes/auth.js';
 import productsRouter from './routes/products.js';
+import categoriesRouter from './routes/categories.js';
 import searchRouter from './routes/search.js';
 import adminRouter from './routes/admin.js';
 import cartRouter from './routes/cart.js';
@@ -22,6 +22,8 @@ import supportRouter from './routes/support.js';
 import ordersRouter from './routes/orders.js';
 import integrationRouter from './routes/integration.js';
 import aiRouter from './routes/ai.js';
+import paymentsRouter from './routes/payments.js';
+import assistRouter from './routes/assist/index.js';
 
 const app = express();
 
@@ -113,10 +115,11 @@ app.use(sessionMiddleware);
 app.get('/health', (_req, res) => res.json({ success: true, data: 'ok' }));
 
 // Mount feature routers under /api to avoid clashes with frontend
-app.use('/api/chat', chatRouter);
+app.use('/api/assist', assistRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/products/search', searchRouter);
 app.use('/api/products', productsRouter);
+app.use('/api/categories', categoriesRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/cart', cartRouter);
 app.use('/api/checkout', checkoutRouter);
@@ -125,6 +128,7 @@ app.use('/api/support', supportRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/integration', integrationRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/payments', paymentsRouter);
 
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));
@@ -143,11 +147,45 @@ if (process.env.NODE_ENV !== 'test') {
                 console.log('DB synced (alter)');
             }
             console.log('DB connected');
+            
+            // Set up HTTP server for socket.io
+            const http = await import('http');
+            const server = http.createServer(app);
+            
+            // Set up Socket.IO
+            const { Server } = await import('socket.io');
+            const io = new Server(server, {
+                cors: corsOptions,
+                path: '/socket.io'
+            });
+            
+            // Set up namespaces
+            const assistNamespace = io.of('/assist');
+            
+            // Handle AI assistant connections
+            assistNamespace.on('connection', (socket) => {
+                console.log('Client connected to AI assistant namespace', socket.id);
+                
+                // Join a session room
+                socket.on('join', (sessionId) => {
+                    if (sessionId) {
+                        socket.join(sessionId);
+                        console.log(`Client joined session: ${sessionId}`);
+                    }
+                });
+                
+                // Handle disconnect
+                socket.on('disconnect', () => {
+                    console.log('Client disconnected from AI assistant namespace', socket.id);
+                });
+            });
+            
+            // Start the server
+            server.listen(PORT, () => console.log(`API listening on :${PORT}`));
         } catch (e) {
             console.error('DB connect error', e.message);
         }
     })();
-    app.listen(PORT, () => console.log(`API listening on :${PORT}`));
 }
 
 export default app;

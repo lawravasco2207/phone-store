@@ -132,15 +132,15 @@ router.get('/introspect', async (_req, res) => {
   try {
     // Basic route map (static list)
     const routes = [
-      '/api/chat',
-      '/api/chat/with-tools',
       '/api/products',
       '/api/products/search',
+      '/api/categories',
       '/api/cart',
       '/api/checkout',
       '/api/reviews',
       '/api/orders',
       '/api/admin',
+      '/api/assist',
       '/api/ai/pages',
       '/api/ai/pages/manifest',
       '/api/ai/db/query',
@@ -159,7 +159,40 @@ router.get('/introspect', async (_req, res) => {
       return { name, tableName: model.getTableName?.() || name, attributes };
     });
 
-    return res.json({ success: true, data: { routes, schema } });
+    // List all categories for easier product search
+    const categories = await db.Category.findAll({
+      attributes: ['id', 'name', 'description']
+    }).catch(() => []);
+
+    // Get product counts by category
+    const categoryCounts = [];
+    if (categories.length > 0) {
+      for (const cat of categories) {
+        const count = await db.sequelize.query(
+          `SELECT COUNT(*) FROM "ProductCategories" WHERE "category_id" = ?`,
+          { 
+            replacements: [cat.id],
+            type: db.Sequelize.QueryTypes.SELECT 
+          }
+        ).then(res => res[0]?.count || 0).catch(() => 0);
+        
+        categoryCounts.push({
+          id: cat.id,
+          name: cat.name,
+          productCount: parseInt(count)
+        });
+      }
+    }
+
+    return res.json({ 
+      success: true, 
+      data: { 
+        routes, 
+        schema, 
+        categories, 
+        categoryCounts 
+      } 
+    });
   } catch (e) {
     console.error('introspect error', e);
     return res.status(500).json({ success: false, error: 'Failed to introspect' });
