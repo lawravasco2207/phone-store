@@ -110,6 +110,28 @@ Output JSON with:
   async generate(userMessage, context, productSummaries = []) {
     if (!this.client) {
       console.warn('⚠️ NLP client not initialized, returning fallback response');
+      // Include product IDs in the fallback response if we have products
+      if (productSummaries && productSummaries.length > 0) {
+        const productIds = productSummaries
+          .map(summary => {
+            const match = summary.match(/Product ID: (\d+)/);
+            return match ? parseInt(match[1], 10) : null;
+          })
+          .filter(id => id !== null);
+          
+        console.log(`Including ${productIds.length} products in fallback response`);
+        
+        return {
+          assistant_message: "I found some products that might interest you. Here are some options from our store:",
+          suggested_products: productIds.slice(0, 3).map(productId => ({
+            productId,
+            reason: "Matched your search criteria"
+          })),
+          actions: [],
+          memory_updates: {}
+        };
+      }
+      
       return this.getFallbackResponse(
         "I'm having trouble connecting to my knowledge base right now. Please try again in a moment."
       );
