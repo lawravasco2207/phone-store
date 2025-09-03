@@ -35,7 +35,6 @@ export default function ProductsListPage() {
   const [loading, setLoading] = useState(true)
   const [totalProducts, setTotalProducts] = useState(0)
   const [categories, setCategories] = useState<{id: number; name: string; description?: string}[]>([])
-  const [categoriesLoading, setCategoriesLoading] = useState(true)
   
   // Filter states - initialize from URL params
   const [category, setCategory] = useState<string>(searchParams.get('category') || '')
@@ -56,7 +55,7 @@ export default function ProductsListPage() {
     return () => clearTimeout(timer)
   }, [query])
 
-  // Update URL params when filters change
+    // Update URL params when filters change
   useEffect(() => {
     const params = new URLSearchParams()
     if (category) params.set('category', category)
@@ -70,16 +69,14 @@ export default function ProductsListPage() {
 
   // Fetch categories
   const fetchCategories = async () => {
-    setCategoriesLoading(true)
     try {
       const response = await api.getCategories()
-      if (response.success && response.data) {
-        setCategories(response.data.categories || [])
+      if (response?.data?.categories) {
+        setCategories(response.data.categories)
       }
     } catch (error) {
-      console.error('Failed to fetch categories:', error)
-    } finally {
-      setCategoriesLoading(false)
+      console.error('Failed to fetch categories', error)
+      show({ variant: 'error', message: 'Failed to load categories' })
     }
   }
 
