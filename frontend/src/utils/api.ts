@@ -1,5 +1,6 @@
 // API utilities for backend integration
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+console.log('⚙️ API_BASE_URL configured as:', API_BASE_URL);
 
 export type ApiResponse<T = any> = {
   success: boolean;
@@ -23,7 +24,8 @@ export type Product = {
   price: number;
   description?: string;
   images?: string[];
-  Categories?: { name: string }[];
+  featured?: boolean;
+  Categories?: { id: number; name: string; description?: string }[];
   Inventory?: { stock_quantity: number };
   inventory?: number; // Flattened inventory for convenience
 };
@@ -92,21 +94,33 @@ async function fetchWithErrorHandling<T>(url: string, options: RequestInit = {})
     const tokenMatch = document.cookie.match(/(?:^|; )token=([^;]+)/);
     if (tokenMatch) {
       (options.headers as Record<string, string>)['Authorization'] = `Bearer ${decodeURIComponent(tokenMatch[1])}`;
+      console.log("Adding Authorization header with token");
+    } else {
+      console.warn("No auth token found in cookies");
+    }
+
+    console.log(`Making ${options.method || 'GET'} request to ${url}`);
+    if (options.body) {
+      console.log("Request body:", options.body);
     }
 
     // Make the request
     const response = await fetch(url, options);
+    console.log(`Response status: ${response.status} ${response.statusText}`);
 
     // Handle HTTP errors
     if (!response.ok) {
       let errorMessage = `HTTP error ${response.status}`;
+      console.error(`Request failed: ${response.status} ${response.statusText}`);
       
       // Try to get more specific error message
       try {
         const errorData = await response.json();
+        console.error("Error response:", errorData);
         errorMessage = errorData.error || errorData.message || errorMessage;
-      } catch {
+      } catch (parseError) {
         // If JSON parsing fails, use the default error message
+        console.error("Could not parse error response:", parseError);
       }
       
       return { 
@@ -116,11 +130,13 @@ async function fetchWithErrorHandling<T>(url: string, options: RequestInit = {})
     }
 
     // Parse the response
-  const data = await response.json();
-  // Capture session id from response (if any)
-  const anyData = data as any;
-  const newSid = anyData?.data?.sessionId || anyData?.sessionId;
-  if (typeof newSid === 'string' && newSid) setSessionId(newSid);
+    const data = await response.json();
+    console.log("Response data:", data);
+    
+    // Capture session id from response (if any)
+    const anyData = data as any;
+    const newSid = anyData?.data?.sessionId || anyData?.sessionId;
+    if (typeof newSid === 'string' && newSid) setSessionId(newSid);
     return data;
   } catch (error) {
     console.error('API request failed:', error);
@@ -140,7 +156,14 @@ class ApiClient {
 
   // Helper to build full API URL
   private getUrl(endpoint: string): string {
-    return `${API_BASE_URL}${endpoint}`;
+    // Ensure endpoint starts with a slash if API_BASE_URL doesn't end with one
+    if (!API_BASE_URL.endsWith('/') && !endpoint.startsWith('/')) {
+      endpoint = '/' + endpoint;
+    }
+    
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.log('🔗 API URL constructed:', url);
+    return url;
   }
 
   // Get data from cache or fetch it
@@ -266,6 +289,14 @@ class ApiClient {
     }>(`/products?${query}`, undefined, cacheKey);
   }
 
+  async getCategories(): Promise<ApiResponse<{ categories: { id: number; name: string; description?: string }[] }>> {
+    return this.request<{ categories: { id: number; name: string; description?: string }[] }>(
+      '/categories', 
+      undefined,
+      'categories'
+    );
+  }
+
   async getProduct(id: number): Promise<ApiResponse<{ product: Product }>> {
     return this.request<{ product: Product }>(`/products/${id}`, 
       undefined, `product:${id}`);
@@ -310,17 +341,43 @@ class ApiClient {
     return response;
   }
 
-  // Checkout
+  // Checkout - creates a new order
   async checkout(paymentMethod: string, paymentDetails?: any): Promise<ApiResponse<{
-    order: Order;
-    payment: { id: number; payment_status: string; transaction_id: string };
+    orderId?: number;
+    order?: { id: number; total_amount: number; currency: string; order_status: string };
+    payment?: { id: number; payment_status: string; transaction_id: string };
   }>> {
+    // Validate that we have the required payment details based on the method
+    if (paymentMethod === 'paypal' && (!paymentDetails?.paypalOrderId)) {
+      // For development/testing only - generate mock PayPal order ID
+      if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
+        paymentDetails = {
+          ...paymentDetails,
+          paypalOrderId: `PAYPAL-ORDER-${Date.now()}`
+        };
+        console.log("Using mock PayPal order ID:", paymentDetails.paypalOrderId);
+      }
+    } else if (paymentMethod === 'mpesa' && (!paymentDetails?.mpesaTransactionId && !paymentDetails?.phoneNumber)) {
+      // For development/testing only - generate mock M-Pesa transaction ID if we have a phone number
+      if (paymentDetails?.phoneNumber && (import.meta.env.DEV || import.meta.env.MODE === 'test')) {
+        paymentDetails = {
+          ...paymentDetails,
+          mpesaTransactionId: `MPESA-TEST-${Date.now()}`
+        };
+      }
+    }
+    
+    // Log the request body for debugging
+    const requestBody = { paymentMethod, ...paymentDetails };
+    console.log("Checkout request:", requestBody);
+    
     const response = await this.request<{
-      order: Order;
-      payment: { id: number; payment_status: string; transaction_id: string };
+      orderId?: number;
+      order?: { id: number; total_amount: number; currency: string; order_status: string };
+      payment?: { id: number; payment_status: string; transaction_id: string };
     }>('/checkout', { 
       method: 'POST',
-      body: JSON.stringify({ paymentMethod, ...paymentDetails })
+      body: JSON.stringify(requestBody)
     });
     
     // Clear cart and orders cache after checkout
@@ -328,6 +385,70 @@ class ApiClient {
     this.clearCache('orders');
     
     return response;
+  }
+
+  // Process payment for an existing order
+  async processPayment(orderId: number, paymentMethod: string, paymentDetails: any): Promise<ApiResponse<{
+    order?: { id: number; status: string };
+    payment?: { id: number; status: string; transactionId: string };
+  }>> {
+    // Validate payment details based on method
+    if (paymentMethod === 'paypal' && !paymentDetails?.paypalOrderId) {
+      return {
+        success: false,
+        error: 'PayPal Order ID is required for PayPal payments'
+      };
+    } else if (paymentMethod === 'mpesa' && !paymentDetails?.phoneNumber) {
+      return {
+        success: false,
+        error: 'Phone number is required for M-Pesa payments'
+      };
+    }
+    
+    console.log(`Processing ${paymentMethod} payment for order #${orderId}:`, paymentDetails);
+    
+    // In development/test, simulate a successful payment
+    if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Return mock success response
+      return {
+        success: true,
+        data: {
+          order: {
+            id: orderId,
+            status: 'paid'
+          },
+          payment: {
+            id: Date.now(),
+            status: 'completed',
+            transactionId: `${paymentMethod.toUpperCase()}-TEST-${Date.now()}`
+          }
+        }
+      };
+    }
+    
+    // For production, this would call the real payment endpoint
+    return this.request<{
+      order?: { id: number; status: string };
+      payment?: { id: number; status: string; transactionId: string };
+    }>(`/payments/${paymentMethod}/process`, {
+      method: 'POST',
+      body: JSON.stringify({
+        orderId,
+        ...paymentDetails
+      })
+    });
+  }
+
+  // Get featured products
+  async getFeaturedProducts(limit = 6): Promise<ApiResponse<{ products: Product[] }>> {
+    return this.request<{ products: Product[] }>(
+      `/products/featured?limit=${limit}`, 
+      undefined, 
+      `featuredProducts:${limit}`
+    );
   }
 
   // Orders
@@ -389,6 +510,22 @@ class ApiClient {
     // Clear product and products cache
     this.clearCache(`product:${id}`);
     this.clearCache('products');
+    this.clearCache('featuredProducts');
+    
+    return response;
+  }
+
+  // Toggle featured status of a product
+  async toggleProductFeatured(id: number, featured?: boolean): Promise<ApiResponse<{ id: number; featured: boolean }>> {
+    const response = await this.request<{ id: number; featured: boolean }>(`/admin/products/${id}/featured`, {
+      method: 'PATCH',
+      body: JSON.stringify({ featured }),
+    });
+    
+    // Clear product and featured products cache
+    this.clearCache(`product:${id}`);
+    this.clearCache('products');
+    this.clearCache('featuredProducts');
     
     return response;
   }
@@ -435,6 +572,88 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ message, userId }),
     });
+  }
+  
+  // AI Sales Assistant endpoints
+  async assistantSend(message: string, sessionId: string, context: any = {}): Promise<ApiResponse<{
+    assistant_message: string;
+    suggested_products: Product[];
+    actions: string[];
+    sessionId: string;
+  }>> {
+    try {
+      console.log('📱 Frontend: Sending message to backend:', { message, sessionId });
+      const response = await this.request<{
+        assistant_message: string;
+        suggested_products: Product[];
+        actions: string[];
+        sessionId: string;
+      }>('/assist/send', {
+        method: 'POST',
+        body: JSON.stringify({ message, sessionId, context }),
+      });
+      
+      console.log('📱 Frontend: Received response from backend:', response);
+      
+      // Ensure we have a properly formatted response
+      // Cast to any to access properties that might be directly on the response object
+      const anyResponse = response as any;
+      
+      // If it's a direct response (not wrapped in data), format it properly
+      if (response.success && !response.data && anyResponse.assistant_message) {
+        // Response has success:true but data is directly on the response object
+        return {
+          success: true,
+          data: {
+            assistant_message: anyResponse.assistant_message,
+            suggested_products: Array.isArray(anyResponse.suggested_products) ? anyResponse.suggested_products : [],
+            actions: Array.isArray(anyResponse.actions) ? anyResponse.actions : [],
+            sessionId: anyResponse.sessionId || sessionId
+          }
+        };
+      }
+      
+      // Ensure suggested_products is always an array if we have the data property
+      if (response.success && response.data) {
+        response.data.suggested_products = Array.isArray(response.data.suggested_products) 
+          ? response.data.suggested_products 
+          : [];
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('Error in assistantSend:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Network error' 
+      };
+    }
+  }
+  
+  async assistantFeedback(sessionId: string, messageId: string, vote: 'up' | 'down', reason?: string): Promise<ApiResponse> {
+    return this.request('/assist/feedback', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, messageId, vote, reason }),
+    });
+  }
+  
+  async assistantSuggestions(params: {
+    category?: string;
+    budget?: number;
+    brand?: string;
+  }): Promise<ApiResponse<{
+    products: Product[];
+    sessionId: string;
+  }>> {
+    const query = new URLSearchParams();
+    if (params.category) query.set('category', params.category);
+    if (params.budget) query.set('budget', params.budget.toString());
+    if (params.brand) query.set('brand', params.brand);
+    
+    return this.request<{
+      products: Product[];
+      sessionId: string;
+    }>(`/assist/suggestions?${query}`);
   }
 
   // AI memory endpoints

@@ -14,14 +14,8 @@ export default function HomePage() {
     const fetchFeaturedProducts = async () => {
       setLoading(true)
       try {
-        // In a real app, we'd have a featured products endpoint
-        // For now, we'll get the first few products
-        const response = await api.getProducts({
-          page: 1,
-          limit: 6,
-          sortBy: 'popularity',
-          sortDir: 'DESC'
-        })
+        // Use the dedicated featured products endpoint
+        const response = await api.getFeaturedProducts(6)
         
         if (response.success && response.data?.products) {
           setFeaturedProducts(response.data.products)

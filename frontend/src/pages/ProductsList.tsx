@@ -34,7 +34,8 @@ export default function ProductsListPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [totalProducts, setTotalProducts] = useState(0)
-  const [categories, setCategories] = useState<string[]>([])
+  const [categories, setCategories] = useState<{id: number; name: string; description?: string}[]>([])
+  const [categoriesLoading, setCategoriesLoading] = useState(true)
   
   // Filter states - initialize from URL params
   const [category, setCategory] = useState<string>(searchParams.get('category') || '')
@@ -67,6 +68,26 @@ export default function ProductsListPage() {
     setSearchParams(params, { replace: true })
   }, [category, sortBy, sortDir, page, query, setSearchParams])
 
+  // Fetch categories
+  const fetchCategories = async () => {
+    setCategoriesLoading(true)
+    try {
+      const response = await api.getCategories()
+      if (response.success && response.data) {
+        setCategories(response.data.categories || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch categories:', error)
+    } finally {
+      setCategoriesLoading(false)
+    }
+  }
+
+  // Fetch categories on component mount
+  useEffect(() => {
+    fetchCategories()
+  }, [])
+
   // Fetch products from backend
   const fetchProducts = async () => {
     setLoading(true)
@@ -82,14 +103,6 @@ export default function ProductsListPage() {
       if (response.success && response.data) {
         setProducts(response.data.products || [])
         setTotalProducts(response.data.pagination?.total || 0)
-        
-        // Extract unique categories from products
-        const uniqueCategories = Array.from(new Set(
-          (response.data.products || []).flatMap(p => 
-            p.Categories?.map(c => c.name) || [p.category]
-          ).filter(Boolean)
-        )).sort()
-        setCategories(uniqueCategories)
       } else {
         show({ variant: 'error', message: response.error || 'Failed to load products' })
       }
@@ -207,15 +220,15 @@ export default function ProductsListPage() {
           </button>
           {categories.map(cat => (
             <button
-              key={cat}
-              onClick={() => setCategory(category === cat ? '' : cat)}
+              key={cat.id}
+              onClick={() => setCategory(category === cat.name ? '' : cat.name)}
               className={`snap-start flex-shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors mr-2 md:mr-0 ${
-                category === cat
+                category === cat.name
                   ? 'bg-[var(--brand-primary)] text-white'
                   : 'bg-gray-100 text-[var(--text)] hover:bg-gray-200'
               }`}
             >
-              {cat}
+              {cat.name}
             </button>
           ))}
         </div>
@@ -252,7 +265,7 @@ export default function ProductsListPage() {
                 >
                   <option value="">All categories</option>
                   {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
                   ))}
                 </select>
               </div>
@@ -465,7 +478,7 @@ export default function ProductsListPage() {
             >
               <option value="">All categories</option>
               {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+                <option key={cat.id} value={cat.name}>{cat.name}</option>
               ))}
             </select>
           </div>

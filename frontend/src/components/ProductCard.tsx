@@ -4,6 +4,7 @@ import type { Product } from '../utils/api'
 import { useFavorites } from './FavoritesContext'
 import { useCart } from './CartContext'
 import { useToast } from './AlertToast'
+import { getProductPlaceholder } from '../utils/imageUtils'
 
 /*
   Enhanced ProductCard: Responsive product card component
@@ -54,7 +55,7 @@ export default function ProductCard({
   }
   
   // Get primary image
-  const primaryImage = product.images?.[0] || '/placeholder-product.jpg'
+  const primaryImage = product.images?.[0] || getProductPlaceholder(product)
   
   // Handle adding product to cart with user feedback
   const handleAddToCart = (e: React.MouseEvent) => {
@@ -162,12 +163,33 @@ export default function ProductCard({
             </span>
           </div>
         )}
+        
+        {/* Featured Badge */}
+        {product.featured && (
+          <div className="absolute left-3 top-3">
+            <span className="rounded-full bg-blue-100 text-blue-800 px-2 py-1 text-xs font-medium shadow-sm">
+              Featured
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Product Information Section - improved spacing for mobile */}
       <div className="p-4 sm:p-4">
-        {/* Category */}
-        <p className="text-sm font-medium text-[var(--muted)] mb-1">{product.category}</p>
+        {/* Categories */}
+        <div className="flex flex-wrap gap-1 mb-1">
+          {product.Categories && product.Categories.length > 0 ? (
+            product.Categories.map((cat, index) => (
+              <span key={cat.id || index} className="text-xs font-medium text-[var(--muted)] bg-gray-100 px-2 py-0.5 rounded-full">
+                {cat.name}
+              </span>
+            ))
+          ) : (
+            <span className="text-xs font-medium text-[var(--muted)] bg-gray-100 px-2 py-0.5 rounded-full">
+              {product.category}
+            </span>
+          )}
+        </div>
         
         {/* Product Name with proper heading hierarchy - larger font on mobile for readability */}
         <Link to={`/products/${product.id}`} className="block">

@@ -1,7 +1,7 @@
 /**
  * CheckoutPage - Now integrated with backend API
  * - One-page checkout with client-side validation and backend processing.
- * - Uses real backend endpoints for cart and checkout.
+ * - Uses React endpoints for cart and checkout.
  *
  * Best practices:
  * - Validate on both client and server; never trust client-only validation.
@@ -14,6 +14,7 @@ import { useAuth } from '../components/AuthContext'
 import { api, type CartItem as ApiCartItem } from '../utils/api'
 import { formatPrice } from '../utils/format'
 import { useToast } from '../components/AlertToast'
+import PaymentSelector from '../components/payment/PaymentSelector'
 
 type FormState = {
   name: string
@@ -21,8 +22,8 @@ type FormState = {
   address: string
   city: string
   zip: string
-  card: string
-  paymentMethod: 'card' | 'paypal' | 'mpesa'
+  phoneNumber: string
+  paymentMethod: 'paypal' | 'mpesa'
   shipping: 'standard' | 'express'
   discountCode: string
 }
@@ -33,8 +34,8 @@ const initial: FormState = {
   address: '',
   city: '',
   zip: '',
-  card: '',
-  paymentMethod: 'card',
+  phoneNumber: '',
+  paymentMethod: (import.meta.env.VITE_DEFAULT_PAYMENT_METHOD as 'paypal' | 'mpesa') || 'mpesa',
   shipping: 'standard',
   discountCode: '',
 }
@@ -45,6 +46,8 @@ export default function CheckoutPage() {
   const [backendCartItems, setBackendCartItems] = useState<ApiCartItem[]>([])
   const [loading, setLoading] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [checkoutStep, setCheckoutStep] = useState<'shipping' | 'payment'>('shipping')
+  const [orderId, setOrderId] = useState<number | null>(null)
   const cart = useCart()
   const { user } = useAuth()
   const { show } = useToast()
@@ -112,8 +115,8 @@ export default function CheckoutPage() {
     if (!f.address.trim()) e.address = 'Address is required'
     if (!f.city.trim()) e.city = 'City is required'
     if (!/^\d{5}(-\d{4})?$/.test(f.zip)) e.zip = 'ZIP must be 5 digits'
-    if (f.paymentMethod === 'card') {
-      if (!/^\d{12,19}$/.test(f.card.replaceAll(' ', ''))) e.card = 'Card must be 12-19 digits'
+    if (f.paymentMethod === 'mpesa' && !/^(?:254|\+254|0)?(7\d{8})$/.test(f.phoneNumber)) {
+      e.phoneNumber = 'Valid Kenyan phone number required for M-Pesa'
     }
     return e
   }
@@ -137,33 +140,59 @@ export default function CheckoutPage() {
     if (Object.keys(eMap).length === 0) {
       setProcessing(true)
       try {
-        const response = await api.checkout(form.paymentMethod, {
-          card: form.paymentMethod === 'card' ? form.card : undefined,
+        // Prepare the payload based on payment method
+        let payloadDetails: any = {
           address: form.address,
           city: form.city,
-          zip: form.zip,
-          shipping: form.shipping,
-          discountCode: form.discountCode
-        })
+          zip: form.zip
+        };
+        
+        // Add payment method specific fields
+        if (form.paymentMethod === 'mpesa') {
+          // For M-Pesa, we need the phone number
+          payloadDetails.phoneNumber = form.phoneNumber;
+          // For testing, generate a mock transaction ID
+          if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
+            payloadDetails.mpesaTransactionId = `MPESA-TEST-${Date.now()}`;
+          }
+        } else if (form.paymentMethod === 'paypal') {
+          // For PayPal, generate a mock order ID for testing
+          if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
+            // Use a consistent format that backend will recognize
+            payloadDetails.paypalOrderId = `PAYPAL-ORDER-${Date.now()}`;
+            console.log("Generated test PayPal order ID:", payloadDetails.paypalOrderId);
+          }
+        }
+        
+        console.log("Checkout payload:", {
+          paymentMethod: form.paymentMethod,
+          ...payloadDetails
+        });
+        
+        // Send the checkout request with appropriate payment details
+        const response = await api.checkout(form.paymentMethod, payloadDetails);
         
         if (response && response.success && response.data) {
-          const methodLabel = form.paymentMethod === 'card' ? 'Card' : form.paymentMethod === 'paypal' ? 'PayPal' : 'M‑Pesa'
-          show({ 
-            variant: 'success', 
-            title: `Order Placed Successfully!`, 
-            message: `Order #${response.data.order.id} received. Total ${formatPrice(response.data.order.total_amount)}. Payment processed via ${methodLabel} (mock).`
-          })
+          console.log("Checkout response:", response.data);
+          // Extract the order ID from the response - handle different response formats
+          const orderIdFromResponse = response.data.orderId || 
+                                    (response.data.order && response.data.order.id);
           
-          // Clear form and refresh cart
-          setForm(initial)
-          await cart.syncWithBackend()
-          setBackendCartItems([])
+          if (!orderIdFromResponse) {
+            console.error("Missing order ID in response:", response.data);
+            throw new Error("Missing order ID in response");
+          }
+          
+          console.log("Extracted order ID:", orderIdFromResponse);
+          setOrderId(orderIdFromResponse);
+          // Move to payment step
+          setCheckoutStep('payment');
         } else {
           show({ 
             variant: 'error', 
             title: 'Checkout failed', 
-            message: response?.error || 'Failed to process order' 
-          })
+            message: response?.error || 'Failed to create order' 
+          });
         }
       } catch (error) {
         console.error('Checkout error:', error)
@@ -178,8 +207,59 @@ export default function CheckoutPage() {
     }
   }
 
-  function set<K extends keyof FormState>(key: K, value: string) {
-    setForm((prev) => ({ ...prev, [key]: value }))
+  function set<K extends keyof FormState>(key: K, value: any) {
+    setForm((prev) => {
+      if (key === 'paymentMethod') {
+        console.log(`Setting payment method to: ${value}`);
+        return { 
+          ...prev, 
+          [key]: value as 'paypal' | 'mpesa',
+          // If switching to M-Pesa, ensure phone number is required in validation
+          phoneNumber: value === 'mpesa' ? prev.phoneNumber : ''
+        };
+      }
+      return { ...prev, [key]: value };
+    });
+    
+    // Clear any relevant validation errors when changing fields
+    if (errors[key]) {
+      setErrors(prev => {
+        const updated = { ...prev };
+        delete updated[key];
+        return updated;
+      });
+    }
+  }
+
+  // Handle payment success
+  const handlePaymentSuccess = async (data: any) => {
+    console.log("Payment success:", data);
+    const methodLabel = form.paymentMethod === 'paypal' ? 'PayPal' : 'M‑Pesa';
+    const orderIdDisplay = data?.order?.id || orderId || 'Unknown';
+    
+    show({ 
+      variant: 'success', 
+      title: `Payment Successful!`, 
+      message: `Order #${orderIdDisplay} has been paid. Payment processed via ${methodLabel}.`
+    });
+    
+    // Clear form and refresh cart
+    setForm(initial);
+    await cart.syncWithBackend();
+    setBackendCartItems([]);
+    
+    // Reset checkout flow
+    setCheckoutStep('shipping');
+    setOrderId(null);
+  }
+
+  // Handle payment error
+  const handlePaymentError = (error: string) => {
+    show({ 
+      variant: 'error', 
+      title: 'Payment failed', 
+      message: error || 'An error occurred during payment processing.'
+    })
   }
 
   if (!user) {
@@ -206,7 +286,7 @@ export default function CheckoutPage() {
             <span className="ml-2">Loading cart...</span>
           </div>
         </div>
-      ) : (
+      ) : checkoutStep === 'shipping' ? (
         <form onSubmit={onSubmit} className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
           <div className="space-y-4">
             <div>
@@ -224,6 +304,11 @@ export default function CheckoutPage() {
               <input className="input mt-1 w-full" value={form.address} onChange={(e)=>set('address', e.target.value)} />
               {errors.address && <p className="mt-1 text-sm text-red-600">{errors.address}</p>}
             </div>
+            <div>
+              <label className="block text-sm text-gray-700">Phone Number (for M-Pesa)</label>
+              <input className="input mt-1 w-full" placeholder="07XXXXXXXX or 254XXXXXXXXX" value={form.phoneNumber} onChange={(e)=>set('phoneNumber', e.target.value)} />
+              {errors.phoneNumber && <p className="mt-1 text-sm text-red-600">{errors.phoneNumber}</p>}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm text-gray-700">City</label>
@@ -239,14 +324,10 @@ export default function CheckoutPage() {
           </div>
 
           <div className="space-y-4">
-            {/* Payment methods */}
+            {/* Payment methods selector (basic) */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Payment method</label>
               <div className="mt-2 space-y-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="radio" name="pm" checked={form.paymentMethod==='card'} onChange={()=>set('paymentMethod','card')} />
-                  <span>Credit/Debit Card</span>
-                </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input type="radio" name="pm" checked={form.paymentMethod==='paypal'} onChange={()=>set('paymentMethod','paypal')} />
                   <span>PayPal</span>
@@ -281,18 +362,6 @@ export default function CheckoutPage() {
               </div>
             </div>
             
-            <div>
-              <label className="block text-sm text-gray-700">Card number</label>
-              <input inputMode="numeric" disabled={form.paymentMethod!=='card'} className="input mt-1 w-full disabled:bg-gray-100" value={form.card} onChange={(e)=>set('card', e.target.value)} placeholder="4242 4242 4242 4242" />
-              {form.paymentMethod==='card' && errors.card && <p className="mt-1 text-sm text-red-600">{errors.card}</p>}
-              {form.paymentMethod==='paypal' && (
-                <p className="mt-1 text-xs text-gray-600">On submit, you'd be redirected to PayPal (mock).</p>
-              )}
-              {form.paymentMethod==='mpesa' && (
-                <p className="mt-1 text-xs text-gray-600">On submit, an M‑Pesa STK push would be initiated (mock).</p>
-              )}
-            </div>
-            
             <div className="rounded-lg border border-[var(--border)] p-4">
               <h2 className="font-medium">Order summary</h2>
               {(!items || items.length === 0) ? (
@@ -305,21 +374,21 @@ export default function CheckoutPage() {
                       <span className="font-medium">{formatPrice(product.price * qty)}</span>
                     </li>
                   ))}
-                  <li className="flex items-center justify-between pt-3">
+                  <li key="shipping-subtotal" className="flex items-center justify-between pt-3">
                     <span>Subtotal</span>
                     <span className="font-medium">{formatPrice(subtotal)}</span>
                   </li>
-                  <li className="flex items-center justify-between pt-2">
+                  <li key="shipping-cost" className="flex items-center justify-between pt-2">
                     <span>Shipping</span>
                     <span className="font-medium">{promo.label.startsWith('FREESHIP') ? formatPrice(0) : formatPrice(shippingCost)}</span>
                   </li>
                   {promo.amount !== 0 && (
-                    <li className="flex items-center justify-between pt-2 text-emerald-700">
+                    <li key="shipping-promo" className="flex items-center justify-between pt-2 text-emerald-700">
                       <span>Promo {promo.label}</span>
                       <span className="font-medium">{formatPrice(promo.amount)}</span>
                     </li>
                   )}
-                  <li className="flex items-center justify-between pt-3 text-base font-semibold">
+                  <li key="shipping-total" className="flex items-center justify-between pt-3 text-base font-semibold">
                     <span>Total</span>
                     <span>{formatPrice(total)}</span>
                   </li>
@@ -332,10 +401,75 @@ export default function CheckoutPage() {
               disabled={!items || items.length === 0 || processing} 
               className="btn-primary w-full disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {processing ? 'Processing...' : 'Place order'}
+              {processing ? 'Processing...' : 'Continue to Payment'}
             </button>
           </div>
         </form>
+      ) : (
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
+          <div className="space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <h3 className="font-medium mb-2">Shipping Details</h3>
+              <div className="text-sm">
+                <p>{form.name}</p>
+                <p>{form.email}</p>
+                <p>{form.address}</p>
+                <p>{form.city}, {form.zip}</p>
+              </div>
+              <button 
+                onClick={() => setCheckoutStep('shipping')} 
+                className="mt-3 text-sm text-blue-600 hover:text-blue-800"
+              >
+                Edit
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <PaymentSelector
+              selectedMethod={form.paymentMethod}
+              onMethodChange={(method) => {
+                console.log("Payment method changed in parent:", method);
+                set('paymentMethod', method);
+                // Log additional information when payment method changes
+                console.log("Payment method updated. Current order ID:", orderId);
+              }}
+              amount={total}
+              orderId={orderId!}
+              phoneNumber={form.phoneNumber}
+              onPaymentSuccess={handlePaymentSuccess}
+              onPaymentError={handlePaymentError}
+            />
+            
+            <div className="rounded-lg border border-[var(--border)] p-4">
+              <h2 className="font-medium">Order summary</h2>
+              {(!items || items.length === 0) ? (
+                <p className="mt-2 text-sm text-gray-600">Your cart is empty.</p>
+              ) : (
+                <ul className="mt-2 divide-y text-sm">
+                  <li key="payment-subtotal" className="flex items-center justify-between pt-2">
+                    <span>Subtotal</span>
+                    <span className="font-medium">{formatPrice(subtotal)}</span>
+                  </li>
+                  <li key="payment-shipping" className="flex items-center justify-between pt-2">
+                    <span>Shipping</span>
+                    <span className="font-medium">{promo.label.startsWith('FREESHIP') ? formatPrice(0) : formatPrice(shippingCost)}</span>
+                  </li>
+                  {promo.amount !== 0 && (
+                    <li key="payment-promo" className="flex items-center justify-between pt-2 text-emerald-700">
+                      <span>Promo {promo.label}</span>
+                      <span className="font-medium">{formatPrice(promo.amount)}</span>
+                    </li>
+                  )}
+                  <li key="payment-total" className="flex items-center justify-between pt-3 text-base font-semibold">
+                    <span>Total</span>
+                    <span>{formatPrice(total)}</span>
+                  </li>
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </section>
   )

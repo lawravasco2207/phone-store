@@ -7,6 +7,7 @@ import { api, API_BASE_URL, type Product, type Review } from '../utils/api'
 import { formatPrice } from '../utils/format'
 import { useToast } from '../components/AlertToast'
 import Viewer360 from '../components/Viewer360'
+import { getProductPlaceholder } from '../utils/imageUtils'
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>()
@@ -153,7 +154,7 @@ export default function ProductDetail() {
 
   const images = product.images && product.images.length > 0 
     ? product.images 
-    : [`${API_BASE_URL}/placeholder/400/400`] // Fallback image
+    : [getProductPlaceholder(product)] // Fallback image
 
   return (
     <section className="py-8">
@@ -174,7 +175,7 @@ export default function ProductDetail() {
                 alt={product.name}
                 className="w-full h-full object-cover"
                 onError={(e) => {
-                  e.currentTarget.src = `${API_BASE_URL}/placeholder/400/400`
+                  e.currentTarget.src = getProductPlaceholder(product)
                 }}
               />
             </div>
@@ -242,9 +243,28 @@ export default function ProductDetail() {
             )}
 
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Category:</span>
-                <span className="text-gray-600">{product.category}</span>
+              <div className="flex flex-wrap gap-2">
+                <span className="font-medium">Categories:</span>
+                {product.Categories && product.Categories.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {product.Categories.map((cat, index) => (
+                      <span 
+                        key={cat.id || index} 
+                        className="text-sm font-medium bg-gray-100 px-2 py-0.5 rounded-full text-gray-700"
+                      >
+                        {cat.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : product.category ? (
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-sm font-medium bg-gray-100 px-2 py-0.5 rounded-full text-gray-700">
+                      {product.category}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-gray-600">No categories</span>
+                )}
               </div>
               
               {product.inventory !== undefined && (

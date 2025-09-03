@@ -15,7 +15,7 @@ import { ToastProvider } from './components/AlertToast'
 import { CartProvider } from './components/CartContext'
 import { FavoritesProvider } from './components/FavoritesContext'
 import { AuthProvider } from './components/AuthContext'
-import VoiceChatBot from './components/chatbot/VoiceChatBot'
+import { ChatWindow } from './components/chat'
 import { CategoryProvider } from './components/CategoryContext'
 import { AuthPromptProvider } from './components/AuthPromptContext'
 
@@ -37,7 +37,7 @@ function RootLayout() {
                 </main>
                 <Footer />
               </div>
-              <VoiceChatBot />
+              <ChatWindow />
             </CategoryProvider>
           </FavoritesProvider>
         </CartProvider>
