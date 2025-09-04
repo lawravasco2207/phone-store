@@ -2,6 +2,8 @@ import express from 'express';
 import db from '../models/index.js';
 import { authRequired } from '../middleware/auth.js';
 import { writeAudit } from '../utils/audit.js';
+import { sendMail } from '../utils/mailer.js';
+import { sendSMS } from '../utils/sms.js';
 
 const router = express.Router();
 
@@ -9,7 +11,8 @@ router.use(authRequired);
 
 // Process checkout and create order
 router.post('/', async (req, res) => {
-  const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST;
+  // Ensure boolean, not undefined
+  const isTest = process.env.NODE_ENV === 'test' || !!process.env.VITEST;
   console.log('Checkout request body:', req.body);
   console.log('Environment:', process.env.NODE_ENV, 'isTest:', isTest);
   
@@ -91,18 +94,18 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Process payment based on method
-    let payment;
+    // Two-step payment: by default, create order and process payment later via /payments/*.
+    // If valid payment proof is included, we verify and complete here; otherwise leave as pending.
+    let payment; // only set if payment is completed here
     let paymentStatus = 'pending';
     let transactionId = '';
-    
-    // Use the integrated payment service for real payment processing
+
     if (paymentMethod === 'paypal') {
-      // For PayPal: Verify payment
-      const { paypalOrderId } = req.body;
-      
-      // In development, accept all PayPal orders without verification
-      if (process.env.NODE_ENV !== 'production' || isTest) {
+      let { paypalOrderId } = req.body; // let to allow dev fallback assignment
+      const isDev = process.env.NODE_ENV !== 'production' || isTest;
+
+      if (isDev) {
+        // Dev/test: accept without verification
         console.log('Development mode: Accepting PayPal order without verification:', paypalOrderId);
         if (!paypalOrderId) {
           console.warn('No PayPal order ID provided in development mode, generating one');
@@ -111,86 +114,60 @@ router.post('/', async (req, res) => {
         paymentStatus = 'completed';
         transactionId = paypalOrderId;
       } else if (paypalOrderId) {
+        // Production: verify only if an order id is supplied; otherwise leave as pending
         try {
-          // Verify with PayPal API in production
           const paypal = await import('@paypal/checkout-server-sdk');
-          
-          // Create PayPal environment
           const environment = new paypal.core.LiveEnvironment(
-            process.env.PAYPAL_CLIENT_ID, 
+            process.env.PAYPAL_CLIENT_ID,
             process.env.PAYPAL_CLIENT_SECRET
           );
-          
           const client = new paypal.core.PayPalHttpClient(environment);
           const request = new paypal.orders.OrdersGetRequest(paypalOrderId);
           const response = await client.execute(request);
-          
           if (response.result.status === 'COMPLETED') {
             paymentStatus = 'completed';
             transactionId = paypalOrderId;
           } else {
-            await t.rollback();
-            return res.status(400).json({ success: false, error: 'PayPal payment not completed' });
+            console.warn('PayPal order exists but not completed, leaving order pending');
           }
         } catch (error) {
-          console.error('PayPal verification error:', error);
-          await t.rollback();
-          return res.status(400).json({ success: false, error: 'PayPal payment verification failed' });
+          console.error('PayPal verification error (leaving as pending):', error);
         }
-      } else {
-        await t.rollback();
-        return res.status(400).json({ success: false, error: 'PayPal order ID required' });
-      }
+      } // else: no paypalOrderId provided -> leave pending
     } else if (paymentMethod === 'mpesa') {
-      // For M-Pesa: Check transaction confirmation
       const { mpesaTransactionId, phoneNumber } = req.body;
-      
-      if (mpesaTransactionId) {
-        try {
-          // In a real implementation, we would verify with M-Pesa API
-          // but for simplicity, we'll assume success if transaction ID is provided
-          paymentStatus = 'completed';
-          transactionId = mpesaTransactionId;
-        } catch (error) {
-          console.error('M-Pesa verification error:', error);
-          // Fallback for tests
-          if (isTest) {
-            paymentStatus = 'completed';
-            transactionId = `test_mpesa_${order.id}`;
-          } else {
-            await t.rollback();
-            return res.status(400).json({ success: false, error: 'M-Pesa payment verification failed' });
-          }
-        }
-      } else if (phoneNumber && isTest) {
-        // For testing only
+      const isDev = process.env.NODE_ENV !== 'production' || isTest;
+      if (isDev && (mpesaTransactionId || phoneNumber)) {
+        // Dev/test shortcuts
         paymentStatus = 'completed';
-        transactionId = `test_mpesa_${order.id}`;
-      } else {
-        await t.rollback();
-        return res.status(400).json({ success: false, error: 'M-Pesa transaction ID or phone number required' });
-      }
+        transactionId = mpesaTransactionId || `test_mpesa_${order.id}`;
+      } else if (mpesaTransactionId) {
+        // In production, if a transaction id is supplied, accept (real verification should occur via payments flow)
+        paymentStatus = 'completed';
+        transactionId = mpesaTransactionId;
+      } // else: no proof provided -> leave pending
     }
 
-    // Create payment record
-    payment = await db.Payment.create({ 
-      user_id: req.user.id, 
-      order_id: order.id, 
-      amount: total, 
-      currency: 'USD', 
-      payment_method: paymentMethod, 
-      payment_status: paymentStatus, 
-      transaction_id: transactionId 
-    }, { transaction: t });
-
-    // Update order status based on payment status
-    await order.update({ 
-      order_status: paymentStatus === 'completed' ? 'paid' : 'pending'
-    }, { transaction: t });
-
-    // Clear the cart if payment was successful
+    // If payment completed here, record it and clear cart; otherwise leave for /payments/* routes
     if (paymentStatus === 'completed') {
+      payment = await db.Payment.create({
+        user_id: req.user.id,
+        order_id: order.id,
+        amount: total,
+        currency: 'USD',
+        payment_method: paymentMethod,
+        payment_status: paymentStatus,
+        transaction_id: transactionId
+      }, { transaction: t });
+
+      await order.update({
+        order_status: 'paid'
+      }, { transaction: t });
+
       await db.CartItem.destroy({ where: { user_id: req.user.id }, transaction: t });
+    } else {
+      // Ensure order remains pending when no payment completed
+      await order.update({ order_status: 'pending' }, { transaction: t });
     }
     
     // Record audit log - wrapped in try/catch to prevent it from affecting the transaction
@@ -206,24 +183,59 @@ router.post('/', async (req, res) => {
     
     // Commit transaction
     await t.commit();
-    
+
+    // Fire-and-forget notifications after successful commit
+  try {
+      const user = await db.User.findByPk(req.user.id);
+      const orderTotalFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: order.currency || 'USD' }).format(Number(order.total_amount));
+
+      if (paymentStatus === 'completed') {
+        if (paymentMethod === 'mpesa') {
+          // Send SMS confirmation to provided phone or user phone
+          const phone = req.body.phoneNumber || user?.phone;
+          if (phone) {
+            const body = `Phone Store: Your payment ${orderTotalFmt} (Order #${order.id}) was received via M-Pesa. Txn: ${transactionId}. Thank you!`;
+            sendSMS(phone, body).catch(e => console.warn('SMS send failed:', e?.message || e));
+          }
+        } else if (paymentMethod === 'paypal') {
+          // Send email confirmation to checkout email or user email
+          const to = req.body.email || user?.email;
+          if (to) {
+            const subject = `Order #${order.id} confirmed - Phone Store`;
+            const html = `
+              <div style="font-family:system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+                <h2>Thanks for your purchase!</h2>
+                <p>We received your PayPal payment for order <strong>#${order.id}</strong>.</p>
+                <p><strong>Total:</strong> ${orderTotalFmt}</p>
+                <p><strong>Transaction ID:</strong> ${transactionId}</p>
+                <p>We'll notify you when your items ship.</p>
+                <p style="margin-top:16px">— Phone Store</p>
+              </div>`;
+            sendMail({ to, subject, html }).catch(e => console.warn('Email send failed:', e?.message || e));
+          }
+        }
+      }
+    } catch (notifyErr) {
+      console.warn('Post-checkout notification error:', notifyErr?.message || notifyErr);
+    }
+
     // Return success response
-    return res.status(201).json({ 
-      success: true, 
-      data: { 
-        orderId: order.id, 
+    return res.status(201).json({
+      success: true,
+      data: {
+        orderId: order.id,
         order: {
           id: order.id,
           total_amount: order.total_amount,
           currency: order.currency,
           order_status: order.order_status
         },
-        payment: { 
+        ...(payment ? { payment: {
           id: payment.id,
-          status: payment.payment_status, 
-          transactionId: payment.transaction_id 
-        } 
-      } 
+          status: payment.payment_status,
+          transactionId: payment.transaction_id
+        }} : {})
+      }
     });
   } catch (error) {
     console.error('Checkout error:', error);

@@ -3,6 +3,8 @@ import express from 'express';
 import db from '../models/index.js';
 import { authRequired } from '../middleware/auth.js';
 import { writeAudit } from '../utils/audit.js';
+import { sendMail } from '../utils/mailer.js';
+import { sendSMS } from '../utils/sms.js';
 import { 
   createPayPalOrder,
   capturePayPalPayment,
@@ -76,7 +78,7 @@ router.post('/paypal/capture', async (req, res) => {
       });
     }
     
-    // Record the successful payment in our database
+  // Record the successful payment in our database
     await recordPayment(
       req.user.id,
       orderId,
@@ -105,6 +107,19 @@ router.post('/paypal/capture', async (req, res) => {
       console.warn('Failed to write audit log:', auditError.message);
     }
     
+    // Send confirmation email (best-effort)
+    try {
+      const to = req.user.email;
+      if (to) {
+        const orderTotalFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: capture.data.currency || 'USD' }).format(Number(capture.data.amount));
+        await sendMail({
+          to,
+          subject: `Order #${orderId} confirmed - Phone Store`,
+          html: `<p>Thanks for your purchase!</p><p>We received your PayPal payment for order <strong>#${orderId}</strong>.</p><p><strong>Total:</strong> ${orderTotalFmt}</p><p><strong>Transaction ID:</strong> ${capture.data.transactionId}</p><p>— Phone Store</p>`
+        });
+      }
+    } catch (e) { console.warn('Email send failed:', e?.message || e); }
+
     return res.json({ 
       success: true, 
       data: { 
@@ -207,14 +222,14 @@ router.post('/mpesa/callback', async (req, res) => {
       where: { transaction_id: CheckoutRequestID }
     });
     
-    if (!payment) {
+  if (!payment) {
       console.error('Payment not found for checkout request ID:', CheckoutRequestID);
       return res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
     }
     
     // Update payment status based on result code
     if (ResultCode === 0) {
-      // Payment successful
+  // Payment successful
       await payment.update({
         payment_status: 'completed',
         metadata: {
@@ -229,6 +244,17 @@ router.post('/mpesa/callback', async (req, res) => {
         { where: { id: payment.order_id } }
       );
       
+      // Send SMS confirmation (best-effort)
+      try {
+        const phone = payment.metadata?.phoneNumber;
+        if (phone) {
+          const order = await db.Order.findByPk(payment.order_id);
+          const orderTotalFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: order?.currency || 'USD' }).format(Number(order?.total_amount || payment.amount));
+          const body = `Phone Store: Your payment ${orderTotalFmt} (Order #${payment.order_id}) was received via M-Pesa. Txn: ${CheckoutRequestID}. Thank you!`;
+          await sendSMS(phone, body);
+        }
+      } catch (e) { console.warn('SMS send failed:', e?.message || e); }
+
       // Record audit
       try {
         await writeAudit(payment.user_id, 'mpesa_payment_completed', 'Payments', payment.id, { 
@@ -342,7 +368,7 @@ router.post('/paypal/process', authRequired, async (req, res) => {
     
     const payment = paymentResult.data.payment;
     
-    // Update order status
+  // Update order status
     await order.update({
       payment_status: 'paid',
       order_status: 'processing'
@@ -360,6 +386,19 @@ router.post('/paypal/process', authRequired, async (req, res) => {
       console.warn('Failed to write audit log:', auditError.message);
     }
     
+    // Send confirmation email (best-effort)
+    try {
+      const to = req.user.email;
+      if (to) {
+        const orderTotalFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: order.currency || 'USD' }).format(Number(order.total_amount));
+        await sendMail({
+          to,
+          subject: `Order #${orderId} confirmed - Phone Store`,
+          html: `<p>Thanks for your purchase!</p><p>We received your PayPal payment for order <strong>#${orderId}</strong>.</p><p><strong>Total:</strong> ${orderTotalFmt}</p><p><strong>Transaction ID:</strong> ${paypalOrderId}</p><p>— Phone Store</p>`
+        });
+      }
+    } catch (e) { console.warn('Email send failed:', e?.message || e); }
+
     return res.json({
       success: true,
       data: {
@@ -443,7 +482,7 @@ router.post('/mpesa/process', authRequired, async (req, res) => {
     
     const payment = paymentResult.data.payment;
     
-    // Update order status
+  // Update order status
     await order.update({
       payment_status: 'paid',
       order_status: 'processing'
@@ -462,6 +501,13 @@ router.post('/mpesa/process', authRequired, async (req, res) => {
       console.warn('Failed to write audit log:', auditError.message);
     }
     
+    // Send SMS confirmation (best-effort)
+    try {
+      const orderTotalFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: order.currency || 'USD' }).format(Number(order.total_amount));
+      const body = `Phone Store: Your payment ${orderTotalFmt} (Order #${orderId}) was received via M-Pesa. Txn: ${transactionId}. Thank you!`;
+      await sendSMS(phoneNumber, body);
+    } catch (e) { console.warn('SMS send failed:', e?.message || e); }
+
     return res.json({
       success: true,
       data: {

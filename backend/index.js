@@ -24,6 +24,7 @@ import integrationRouter from './routes/integration.js';
 import aiRouter from './routes/ai.js';
 import paymentsRouter from './routes/payments.js';
 import assistRouter from './routes/assist/index.js';
+import supportAssistRouter from './routes/assist.js';
 
 const app = express();
 
@@ -116,6 +117,7 @@ app.get('/health', (_req, res) => res.json({ success: true, data: 'ok' }));
 
 // Mount feature routers under /api to avoid clashes with frontend
 app.use('/api/assist', assistRouter);
+app.use('/api/support/assist', supportAssistRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/products/search', searchRouter);
 app.use('/api/products', productsRouter);

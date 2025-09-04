@@ -142,6 +142,8 @@ export default function CheckoutPage() {
       try {
         // Prepare the payload based on payment method
         let payloadDetails: any = {
+          name: form.name,
+          email: form.email,
           address: form.address,
           city: form.city,
           zip: form.zip
@@ -328,13 +330,19 @@ export default function CheckoutPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700">Payment method</label>
               <div className="mt-2 space-y-2">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="radio" name="pm" checked={form.paymentMethod==='paypal'} onChange={()=>set('paymentMethod','paypal')} />
-                  <span>PayPal</span>
+                <label className="flex items-center justify-between p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                  <span className="flex items-center gap-2 text-sm">
+                    <input type="radio" name="pm" checked={form.paymentMethod==='paypal'} onChange={()=>set('paymentMethod','paypal')} />
+                    <span>PayPal</span>
+                  </span>
+                  <img src="/paypal.svg" alt="PayPal" className="h-6 w-16 object-contain" />
                 </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="radio" name="pm" checked={form.paymentMethod==='mpesa'} onChange={()=>set('paymentMethod','mpesa')} />
-                  <span>M‑Pesa</span>
+                <label className="flex items-center justify-between p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                  <span className="flex items-center gap-2 text-sm">
+                    <input type="radio" name="pm" checked={form.paymentMethod==='mpesa'} onChange={()=>set('paymentMethod','mpesa')} />
+                    <span>M‑Pesa</span>
+                  </span>
+                  <img src="/mpesa.svg" alt="M-Pesa" className="h-6 w-16 object-contain" />
                 </label>
               </div>
             </div>

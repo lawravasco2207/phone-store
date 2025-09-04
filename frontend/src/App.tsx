@@ -1,4 +1,5 @@
 import { Outlet, Route, Routes, Link } from 'react-router-dom'
+import SupportRoutes from './components/support/SupportRoutes'
 import AIDynamicRoutes from './components/AIDynamicRoutes'
 import ProductsListPage from './pages/ProductsList'
 import ProductDetailPage from './pages/ProductDetail'
@@ -74,6 +75,8 @@ export default function App() {
         <Route path="/wishlist" element={<WishlistPage />} />
         <Route path="/checkout" element={<CheckoutPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
+  {/* Support: chat, new ticket, list, details */}
+  <Route path="/support/*" element={<SupportRoutes />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

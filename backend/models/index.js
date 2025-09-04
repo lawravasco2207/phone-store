@@ -103,10 +103,33 @@ export const Inventory = sequelize.define('Inventory', {
   tableName: 'Inventories'  // Explicitly set the table name to match Sequelize's default pluralization
 });
 
+// Enhanced SupportTicket model (UUID id, description, category, expanded statuses)
 export const SupportTicket = sequelize.define('SupportTicket', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true,
+  },
   subject: { type: DataTypes.STRING, allowNull: false },
-  message: { type: DataTypes.TEXT, allowNull: false },
-  status: { type: DataTypes.ENUM('open', 'in_progress', 'closed'), defaultValue: 'open' },
+  description: { type: DataTypes.TEXT, allowNull: false },
+  category: { type: DataTypes.ENUM('Billing', 'Technical', 'Account', 'Other'), allowNull: false, defaultValue: 'Other' },
+  status: { type: DataTypes.ENUM('open', 'in_progress', 'resolved', 'closed'), allowNull: false, defaultValue: 'open' },
+}, {
+  tableName: 'SupportTickets',
+  underscored: true,
+});
+
+// TicketHistory model for status changes
+export const TicketHistory = sequelize.define('TicketHistory', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  ticket_id: { type: DataTypes.UUID, allowNull: false },
+  status: { type: DataTypes.ENUM('open', 'in_progress', 'resolved', 'closed'), allowNull: false },
+  note: { type: DataTypes.TEXT },
+  updated_by: { type: DataTypes.INTEGER },
+  timestamp: { type: DataTypes.DATE, allowNull: false, defaultValue: Sequelize.fn('NOW') },
+}, {
+  tableName: 'TicketHistories',
+  timestamps: false,
 });
 
 export const AuditLog = sequelize.define('AuditLog', {
@@ -167,6 +190,11 @@ Inventory.belongsTo(Product, { foreignKey: 'product_id' });
 
 User.hasMany(SupportTicket, { foreignKey: 'user_id' });
 SupportTicket.belongsTo(User, { foreignKey: 'user_id' });
+
+// Support ticket history associations
+SupportTicket.hasMany(TicketHistory, { foreignKey: 'ticket_id', as: 'TicketHistories' });
+TicketHistory.belongsTo(SupportTicket, { foreignKey: 'ticket_id' });
+TicketHistory.belongsTo(User, { foreignKey: 'updated_by', as: 'updater' });
 
 User.hasMany(AuditLog, { foreignKey: 'user_id' });
 AuditLog.belongsTo(User, { foreignKey: 'user_id' });
@@ -274,6 +302,7 @@ const db = {
   SupportTicket,
   AuditLog,
   VerificationToken,
+  TicketHistory,
   ChatSession,
   ChatMessage,
   // New models
